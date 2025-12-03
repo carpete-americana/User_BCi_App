@@ -39,7 +39,7 @@
   },
   "build": {
     "appId": "pt.bcibizz.UserApp",
-    "productName": "BCI User App",
+    "productName": "BCI",
     "copyright": "Copyright © 2025 BCI Bizz",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
@@ -81,10 +81,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "BCI User App",
+      "shortcutName": "BCI",
       "installerIcon": "build/bci.ico",
       "uninstallerIcon": "build/bci.ico",
-      "license": "LICENSE"
+      "license": "LICENSE",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": "dmg",
