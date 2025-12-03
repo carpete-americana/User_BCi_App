@@ -45,9 +45,10 @@
   },
   "build": {
     "appId": "pt.bcibizz.UserApp",
-    "productName": "BCITESTE",
+    "productName": "BCI",
     "copyright": "Copyright © 2025 BCI Bizz",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "afterPack": "./add-icon.js",
     "files": [
       "src/**/*",
       "public/**/*",
