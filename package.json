@@ -47,7 +47,6 @@
     "appId": "pt.bcibizz.UserApp",
     "productName": "BCI",
     "copyright": "Copyright © 2025 BCI Bizz",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "afterPack": "./add-icon.js",
     "files": [
       "src/**/*",
@@ -80,6 +79,7 @@
           ]
         }
       ],
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "icon": "build/app-icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "signAndEditExecutable": false,
@@ -98,6 +98,7 @@
     },
     "mac": {
       "target": "dmg",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "category": "public.app-category.finance",
       "hardenedRuntime": false,
       "gatekeeperAssess": false
@@ -110,6 +111,7 @@
         "AppImage",
         "deb"
       ],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "icon": "build/bci-rounded2.png",
       "category": "Finance",
       "maintainer": "carpete_americana"
