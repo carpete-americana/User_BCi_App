@@ -88,14 +88,12 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "build/icon.icns",
       "category": "public.app-category.finance",
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "${productName} ${version}",
-      "icon": "build/icon.icns"
+      "title": "${productName} ${version}"
     },
     "linux": {
       "target": [
