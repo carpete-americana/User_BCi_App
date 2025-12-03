@@ -318,24 +318,33 @@ document.addEventListener('DOMContentLoaded', async () => {
           DEBUG && console.warn('Could not remove chrome elements:', e.message);
         }
 
-        document.body.innerHTML = html;
-        document.title = 'Login | BCi';
-
-        // Load CSS BEFORE injecting HTML to prevent FOUC
+        // Load CSS FIRST to prevent FOUC
         await injectCSSFromRoute('login');
         
-        // Small delay to ensure CSS is fully applied
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Then inject HTML
+        document.body.innerHTML = html;
+        document.title = 'Login | BCi';
         
+        // Execute page script
         await executePageScript('login');
+        
+        // Hide loading and show page
         await hideLoading();
+        
+        // Make body visible with smooth transition
+        requestAnimationFrame(() => {
+          document.body.classList.add('ready');
+        });
 
-        // Signal renderer ready only after everything is loaded
-        window.electronAPI.rendererReady && window.electronAPI.rendererReady();
+        // Signal renderer ready after everything is loaded and visible
+        setTimeout(() => {
+          window.electronAPI.rendererReady && window.electronAPI.rendererReady();
+        }, 150);
       } catch (err) {
         console.error('Failed to load login page from repo', err);
         await hideLoading();
         showErrorPage(err, 'login');
+        document.body.classList.add('ready');
         // Still signal ready even on error so window shows
         window.electronAPI.rendererReady && window.electronAPI.rendererReady();
       }
@@ -347,17 +356,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     routes = await window.electronAPI.loadRouteConfig();
     generateSidebarMenu();
+    
+    // Hide content while loading dashboard to prevent flash
+    document.body.style.opacity = '0';
+    
     const initialRoute = window.location.hash.substring(1) || 'dashboard';
     await loadPage(initialRoute);
     await Utils.notification();
     
     await hideLoading();
+    
+    // Make body visible with smooth fade-in
+    requestAnimationFrame(() => {
+      document.body.style.opacity = '1';
+      document.body.classList.add('ready');
+    });
 
     // Signal main process that renderer is ready
     if (window.electronAPI && typeof window.electronAPI.rendererReady === 'function') {
       setTimeout(() => {
         window.electronAPI.rendererReady && window.electronAPI.rendererReady();
-      }, 500);
+      }, 150);
     }
     
     setTimeout(isItBirthday, 4000);
@@ -369,5 +388,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('renderer init error', err);
     await hideLoading();
     showErrorPage(err, 'dashboard');
+    document.body.classList.add('ready');
   }
 });
