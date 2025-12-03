@@ -6,6 +6,9 @@ on:
       - 'v*.*.*'  # Triggers on version tags like v2.0.0, v2.1.0, etc.
   workflow_dispatch:  # Allows manual trigger from GitHub Actions tab
 
+permissions:
+  contents: write  # Necessário para criar releases e fazer upload de assets
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
