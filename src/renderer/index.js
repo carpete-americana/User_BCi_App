@@ -17,6 +17,7 @@ export let currentPage = null;
   }
 })();
 
+
 /* CSS injection: injects <style data-page-css> with cached content */
 async function injectCSSFromRoute(route) {
   const cssPath = `${route}/styles.css`;
