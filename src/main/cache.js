@@ -30,7 +30,9 @@ async function apiFetchWithCache(pathRel, basePath, ttl) {
   const now = Date.now();
   
   const filePath = `${basePath}${pathRel}`;
-  const url = `${API_CONFIG.BASE_URL}${API_CONFIG.FILES_ENDPOINT}/${filePath}`;
+  // Adicionar versioning ao URL para invalidar cache em crítico
+  const versionParam = `?v=${API_CONFIG.CACHE_BUSTER}`;
+  const url = `${API_CONFIG.BASE_URL}${API_CONFIG.FILES_ENDPOINT}/${filePath}${versionParam}`;
 
   // Validate URL before fetching
   const security = require('./security');

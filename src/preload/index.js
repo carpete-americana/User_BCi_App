@@ -25,20 +25,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Install and update (matches main ipc channel 'install-and-update')
     InstallAndUpdate: () => ipcRenderer.send('install-and-update'),
     installAndUpdate: () => ipcRenderer.send('install-and-update'),
-        // Updater event listeners
-        onUpdateAvailable: (cb) => {
-            ipcRenderer.on('update-available', () => cb && cb());
-        },
-        onDownloadProgress: (cb) => {
-            ipcRenderer.on('download-progress', (e, progress) => cb && cb(progress));
-        },
-        onUpdateDownloaded: (cb) => {
-            ipcRenderer.on('update-downloaded', (e, info) => cb && cb(info));
-        },
-        // Debug: test updater triggers (only available if main registered handlers)
-        testUpdater: {
-        },
-           // Removed debug-only testUpdater exposure after stabilization
+    // Updater event listeners
+    onUpdateAvailable: (cb) => {
+      ipcRenderer.on('update-available', (e, data) => cb && cb(data));
+    },
+    onDownloadProgress: (cb) => {
+      ipcRenderer.on('download-progress', (e, progress) => cb && cb(progress));
+    },
+    onUpdateDownloaded: (cb) => {
+      ipcRenderer.on('update-downloaded', (e, info) => cb && cb(info));
+    },
+    onUpdateError: (cb) => {
+      ipcRenderer.on('update-error', (e, error) => cb && cb(error));
+    },
 });
 
 contextBridge.exposeInMainWorld("electronStorage", {
@@ -52,4 +51,9 @@ contextBridge.exposeInMainWorld("githubCache", {
     fetchAsset: (pathRel, ttl) => ipcRenderer.invoke("github-cache:fetchAsset", pathRel, ttl),
     clearFile: (pathRel) => ipcRenderer.invoke("github-cache:clear", pathRel),
     clearAll: () => ipcRenderer.invoke("github-cache:clearAll")
+});
+
+// Testing helper (DEV ONLY)
+contextBridge.exposeInMainWorld("test", {
+    simulateUpdate: () => ipcRenderer.invoke('test:simulateUpdate')
 });

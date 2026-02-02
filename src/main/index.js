@@ -34,6 +34,15 @@ ipcMain.handle('metrics:trackPageLoad', (e, pageName, startTime) => metrics.trac
 ipcMain.handle('metrics:trackFeature', (e, featureName) => metrics.trackFeatureUsage(featureName));
 ipcMain.handle('metrics:getSummary', () => metrics.getMetricsSummary());
 
+// IPC Handlers - Testing (DEV ONLY)
+if (DEBUG) {
+  ipcMain.handle('test:simulateUpdate', () => {
+    DEBUG && console.log('[TEST] Simulating update available');
+    updater.simulateUpdateAvailable();
+    return true;
+  });
+}
+
 // IPC Handlers - Navigation and Auth
 ipcMain.handle('navigate', window.handleNavigate);
 ipcMain.handle('logout', window.handleLogout);

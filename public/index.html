@@ -58,8 +58,20 @@
 </div>
 
 <script>
+  let DEBUG = false;
+  
+  // Load DEBUG mode from main process
+  (async () => {
+    try {
+      DEBUG = await window.electronAPI.getDebugMode();
+    } catch (e) {
+      console.warn('Could not load DEBUG mode');
+    }
+  })();
+
   // Mostrar o badge com animação quando houver atualização
-  window.electronAPI.onUpdateAvailable(() => {
+  window.electronAPI.onUpdateAvailable((data) => {
+    DEBUG && console.log('[UPDATE] Update available:', data);
     const badge = document.getElementById('update-badge');
     badge.style.display = 'block';
     setTimeout(() => {
@@ -69,6 +81,7 @@
 
   // Baixar quando clicar
   document.getElementById('download-update').addEventListener('click', () => {
+    DEBUG && console.log('[UPDATE] Starting download');
     // Mostrar o container de progresso
     document.getElementById('download-progress-container').style.display = 'block';
     
@@ -82,12 +95,14 @@
   // Monitorar progresso
   window.electronAPI.onDownloadProgress((progress) => {
     const percent = Math.round(progress.percent);
+    DEBUG && console.log('[UPDATE] Download progress:', percent + '%');
     document.getElementById('download-progress-bar').style.width = `${percent}%`;
     document.getElementById('progress-text').innerText = `${percent}%`;
   });
 
   // Quando o download estiver completo
-  window.electronAPI.onUpdateDownloaded(() => {
+  window.electronAPI.onUpdateDownloaded((info) => {
+    DEBUG && console.log('[UPDATE] Update downloaded:', info);
     document.getElementById('download-progress-bar').style.width = '100%';
     document.getElementById('progress-text').innerText = '100%';
     document.getElementById('progress-info-text').innerText = 'Atualização pronta!';
@@ -102,14 +117,22 @@
     }, 1000);
   });
 
+  // Tratar erros de update
+  window.electronAPI.onUpdateError((error) => {
+    DEBUG && console.error('[UPDATE] Error:', error);
+    document.getElementById('progress-info-text').innerText = 'Erro ao atualizar: ' + error.message;
+    document.getElementById('download-progress-container').style.display = 'block';
+  });
+
   // Reiniciar aplicação quando clicar
   document.getElementById('restart-button').addEventListener('click', () => {
     const btn = document.getElementById('restart-button');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    DEBUG && console.log('[UPDATE] Installing update and restarting');
     
-    // Chamar método correto (corrigido de InstallAndUpdate para restartAndUpdate)
+    // Chamar método correto para instalar e atualizar
     setTimeout(() => {
-        window.electronAPI.InstallAndUpdate();
+      window.electronAPI.installAndUpdate();
     }, 1500);
   });
 </script>

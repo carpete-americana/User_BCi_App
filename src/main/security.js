@@ -30,6 +30,8 @@ const CSP_DIRECTIVES = {
   ],
   'connect-src': [
     "'self'",
+    "http://localhost:3000",  // Backend API (dev)
+    "http://localhost:3001",  // Frontend API
     "https://raw.githubusercontent.com",
     "https://api.github.com",
     "https://bcibizz.pt"
@@ -67,12 +69,16 @@ function isUrlSafe(url) {
   try {
     const urlObj = new URL(url);
     
-    // Allow only HTTPS (except localhost in debug mode)
+    // Allow localhost (any port) for development and testing
+    if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1' || urlObj.hostname === '0.0.0.0') {
+      DEBUG && console.log('[SECURITY] Localhost URL allowed:', url);
+      return true;
+    }
+    
+    // Allow only HTTPS for remote URLs
     if (urlObj.protocol !== 'https:') {
-      if (!DEBUG || !urlObj.hostname.includes('localhost')) {
-        DEBUG && console.warn('[SECURITY] Blocked non-HTTPS URL:', url);
-        return false;
-      }
+      DEBUG && console.warn('[SECURITY] Blocked non-HTTPS URL:', url);
+      return false;
     }
     
     // Whitelist of allowed domains
