@@ -247,7 +247,7 @@ async function isItBirthday() {
   try {
     const user_response = await API.getUserData();
     const profile_response = await API.getProfileByPhone(user_response.result.data.phone);
-    const birthdate = profile_response.result.data.birth_date;
+    const birthdate = profile_response.result.birth_date;
     if (!birthdate) return false;
     const [y,m,d] = birthdate.split('-').map(Number);
     const b = new Date(y, m-1, d);
@@ -265,7 +265,7 @@ async function isItBirthday() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Check version and clear cache if major update (1.x -> 2.x)
-    const currentVersion = '2.0.6';
+    const currentVersion = await window.electronAPI.getVersion();
     const lastVersion = await window.electronStorage.getItem('app-version');
     
     if (lastVersion && lastVersion.startsWith('1.')) {
