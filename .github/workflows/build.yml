@@ -33,7 +33,7 @@ jobs:
       
       - name: Build application
         env:
-          GH_TOKEN: ${{ secrets.gittoken }}
+          GH_TOKEN: ${{ secrets.GITTOKEN }}
         run: npm run build:release
       
       - name: Upload Windows artifact
@@ -80,4 +80,4 @@ jobs:
           prerelease: false
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.gittoken }}
+          GITHUB_TOKEN: ${{ secrets.GITTOKEN }}
