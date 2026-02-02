@@ -141,6 +141,9 @@ app.whenReady().then(() => {
   // Start background sync
   cache.startBackgroundSync();
   
+  // Start hash refresh (valida integridade dos ficheiros a cada 5 minutos)
+  cache.startHashRefresh();
+  
   DEBUG && console.log('[APP] All features initialized');
   updater.checkForUpdates();
 });

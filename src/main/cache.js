@@ -1,8 +1,11 @@
-// Frontend API cache module with rate limiting and retry logic
+// Frontend API cache module with hash-based validation
 const ElectronStorage = require('../../js/storage');
 const { API_CONFIG, GITHUB_CONFIG, DEBUG } = require('./config');
+const crypto = require('crypto');
 
 const STORAGE_PREFIX = API_CONFIG.STORAGE_PREFIX;
+const HASHES_CACHE_KEY = 'api-hashes-cache';
+const HASHES_TTL = 5 * 60 * 1000; // Cache hashes por 5 minutos
 
 // Exponential backoff configuration
 const RETRY_CONFIG = {
@@ -14,15 +17,88 @@ const RETRY_CONFIG = {
 // Offline request queue
 let offlineQueue = [];
 let isOnline = true;
-
-// No rate limiting needed for our own API (handled by the server)
-// Requests are made directly without queue delays
+let apiHashes = null;
+let hashesLastFetched = 0;
 
 /**
- * Fetch a file from the Frontend API with ETag-based caching and configurable TTL.
- * @param {string} pathRel - Relative path (e.g., "login/index.html")
- * @param {string} basePath - Base path prefix (e.g., "pages/", "" for assets)
- * @param {number} ttl - Time-to-live in milliseconds
+ * Busca hashes dos ficheiros da API
+ */
+async function fetchHashesFromAPI() {
+  try {
+    const now = Date.now();
+    const cachedHashes = ElectronStorage.getItem(HASHES_CACHE_KEY);
+    
+    // Se tem cache de hashes e é recente, usa
+    if (cachedHashes && cachedHashes.fetchedAt && (now - cachedHashes.fetchedAt < HASHES_TTL)) {
+      DEBUG && console.log('[HASHES] Usando cache de hashes');
+      return cachedHashes.data;
+    }
+    
+    const url = `${API_CONFIG.BASE_URL}/api/hashes`;
+    DEBUG && console.log('[HASHES] Buscando hashes da API...');
+    
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    
+    const result = await resp.json();
+    if (result.success && result.data) {
+      const hashData = {
+        data: result.data,
+        fetchedAt: now
+      };
+      ElectronStorage.setItem(HASHES_CACHE_KEY, hashData);
+      DEBUG && console.log('[HASHES] ✓ Hashes carregados:', result.data.version);
+      return result.data;
+    }
+    
+    return null;
+  } catch (e) {
+    DEBUG && console.error('[HASHES] Erro ao buscar hashes:', e.message);
+    // Retorna hashes em cache mesmo se antigos
+    const cachedHashes = ElectronStorage.getItem(HASHES_CACHE_KEY);
+    return cachedHashes?.data || null;
+  }
+}
+
+/**
+ * Calcula hash MD5 de um conteúdo (primeiros 8 chars)
+ */
+function calculateHash(content) {
+  if (!content) return null;
+  const hash = crypto.createHash('md5').update(content).digest('hex');
+  return hash.substring(0, 8); // Primeiros 8 caracteres como a API faz
+}
+
+/**
+ * Valida se o ficheiro mudou comparando hashes
+ */
+function validateFileHash(filePath, content) {
+  if (!apiHashes || !apiHashes.assets) {
+    return true; // Se não tem hashes, assume que é válido
+  }
+  
+  const expectedHash = apiHashes.assets[filePath];
+  if (!expectedHash) {
+    DEBUG && console.log('[HASH] Ficheiro não encontrado na lista de hashes:', filePath);
+    return true; // Ficheiro novo ou não mapeado
+  }
+  
+  const actualHash = calculateHash(content);
+  const isValid = actualHash === expectedHash;
+  
+  if (!isValid) {
+    DEBUG && console.log(`[HASH] ❌ Hash mismatch para ${filePath}: esperado ${expectedHash}, obtido ${actualHash}`);
+  } else {
+    DEBUG && console.log(`[HASH] ✓ Hash válido para ${filePath}`);
+  }
+  
+  return isValid;
+}
+
+/**
+ * Fetch a file from the Frontend API with hash-based validation
  */
 async function apiFetchWithCache(pathRel, basePath, ttl) {
   const key = STORAGE_PREFIX + pathRel;
@@ -40,10 +116,22 @@ async function apiFetchWithCache(pathRel, basePath, ttl) {
     throw new Error(`Unsafe URL blocked: ${url}`);
   }
 
-  // Check if cached version is still valid
-  if (cached && cached.fetchedAt && (now - cached.fetchedAt < ttl)) {
-    DEBUG && console.log(`[API CACHE HIT] ${pathRel} (${Math.round((now - cached.fetchedAt) / 1000)}s old)`);
-    return cached;
+  // Buscar hashes se não tem
+  if (!apiHashes) {
+    apiHashes = await fetchHashesFromAPI();
+  }
+
+  // Validar cache usando APENAS hashes (não TTL!)
+  if (cached && cached.content && apiHashes) {
+    const filePathForHash = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+    if (validateFileHash(filePathForHash, cached.content)) {
+      DEBUG && console.log(`[STORAGE] ✓ Carregado: ${key} (hash: ${cached.hash})`);
+      DEBUG && console.log(`[API CACHE HIT] ${pathRel} (hash válido)`);
+      return cached;
+    } else {
+      DEBUG && console.log(`[STORAGE] ❌ Hash inválido: ${key}, recarregando...`);
+      DEBUG && console.log(`[API CACHE INVALID] ${pathRel} (hash mudou, recarregando)`);
+    }
   }
 
   DEBUG && console.log(`[API FETCH] ${url}`);
@@ -63,6 +151,7 @@ async function apiFetchWithCache(pathRel, basePath, ttl) {
       if (resp.status === 304 && cached) {
         cached.fetchedAt = now;
         ElectronStorage.setItem(key, cached);
+        DEBUG && console.log(`[STORAGE] ✓ Guardado (304): ${key}`);
         DEBUG && console.log(`[API CACHE HIT] ${pathRel} (304 Not Modified)`);
         
         // Track cache hit
@@ -77,9 +166,15 @@ async function apiFetchWithCache(pathRel, basePath, ttl) {
       if (resp.ok) {
         const text = await resp.text();
         const etag = resp.headers.get('etag');
-        const payload = { content: text, etag, fetchedAt: now };
+        const payload = { 
+          content: text, 
+          etag, 
+          fetchedAt: now,
+          hash: calculateHash(text) // Guarda hash para validação
+        };
         ElectronStorage.setItem(key, payload);
-        DEBUG && console.log(`[API SUCCESS] ${pathRel} (${text.length} bytes)`);
+        DEBUG && console.log(`[STORAGE] ✓ Guardado: ${key} (hash: ${payload.hash})`);
+        DEBUG && console.log(`[API SUCCESS] ${pathRel} (${text.length} bytes, hash: ${payload.hash})`);
         
         // Track cache miss
         try {
@@ -310,6 +405,17 @@ function startBackgroundSync() {
   DEBUG && console.log('[BACKGROUND SYNC] Background sync started (30min interval)');
 }
 
+/**
+ * Inicia refresh periódico de hashes
+ */
+function startHashRefresh() {
+  // Busca hashes a cada 5 minutos
+  setInterval(async () => {
+    DEBUG && console.log('[HASHES] Iniciando refresh periódico...');
+    apiHashes = await fetchHashesFromAPI();
+  }, 5 * 60 * 1000);
+}
+
 module.exports = {
   handleFetch,
   handleFetchAsset,
@@ -320,5 +426,7 @@ module.exports = {
   cleanOldCache,
   setOnlineStatus,
   preloadFrequentPages,
-  startBackgroundSync
+  startBackgroundSync,
+  startHashRefresh,
+  fetchHashesFromAPI
 };

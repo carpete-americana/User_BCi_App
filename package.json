@@ -1,7 +1,7 @@
 {
   "name": "bci",
   "productName": "BCI",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "description": "Aplicação oficial BCI",
   "keywords": [
     "bci",
@@ -67,8 +67,7 @@
         "provider": "github",
         "owner": "carpete-americana",
         "repo": "User_BCi_App",
-        "releaseType": "release",
-        "publishAutoUpdate": true
+        "releaseType": "release"
       }
     ],
     "win": {

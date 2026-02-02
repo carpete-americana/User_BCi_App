@@ -35,8 +35,6 @@ function createWindow() {
   } catch (e) {
     DEBUG && console.warn('[WINDOW] Could not load app icon:', e.message);
   }
-
-  ElectronStorage.clearStorage()
   
   const win = new BrowserWindow({
     x: state.x,
