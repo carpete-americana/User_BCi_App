@@ -33,7 +33,7 @@ jobs:
       
       - name: Build application
         env:
-          GH_TOKEN: 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
+          GH_TOKEN: ${{ secrets.gittoken }}
         run: npm run build:release
       
       - name: Upload Windows artifact
@@ -80,4 +80,4 @@ jobs:
           prerelease: false
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: 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
+          GITHUB_TOKEN: ${{ secrets.gittoken }}
