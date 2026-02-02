@@ -1,7 +1,7 @@
 // Configuration for Frontend API cache and app settings
 require('dotenv').config();
 
- const DEBUG = true;//process.env.DEBUG === 'true' || false;
+ const DEBUG = false; //process.env.DEBUG === 'true' || false;
 
 // Frontend API configuration (replaces GitHub direct access)
 const API_CONFIG = {

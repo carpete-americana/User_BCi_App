@@ -22,9 +22,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     
     // Trigger updater actions in main
     downloadUpdate: () => ipcRenderer.send('download-update'),
-    // Install and update (matches main ipc channel 'install-and-update')
-    InstallAndUpdate: () => ipcRenderer.send('install-and-update'),
-    installAndUpdate: () => ipcRenderer.send('install-and-update'),
+    // Install and update - pode receber installerPath como parâmetro
+    InstallAndUpdate: (installerPath) => ipcRenderer.send('install-and-update', installerPath),
+    installAndUpdate: (installerPath) => ipcRenderer.send('install-and-update', installerPath),
     // Updater event listeners
     onUpdateAvailable: (cb) => {
       ipcRenderer.on('update-available', (e, data) => cb && cb(data));

@@ -100,9 +100,13 @@
     document.getElementById('progress-text').innerText = `${percent}%`;
   });
 
+  // Armazenar info do update para usar depois
+  let currentUpdateInfo = null;
+
   // Quando o download estiver completo
   window.electronAPI.onUpdateDownloaded((info) => {
     DEBUG && console.log('[UPDATE] Update downloaded:', info);
+    currentUpdateInfo = info; // Guardar para usar no click
     document.getElementById('download-progress-bar').style.width = '100%';
     document.getElementById('progress-text').innerText = '100%';
     document.getElementById('progress-info-text').innerText = 'Atualização pronta!';
@@ -130,9 +134,14 @@
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     DEBUG && console.log('[UPDATE] Installing update and restarting');
     
-    // Chamar método correto para instalar e atualizar
+    // Chamar método correto para instalar e atualizar com o caminho do instalador
     setTimeout(() => {
-      window.electronAPI.installAndUpdate();
+      if (currentUpdateInfo && currentUpdateInfo.installerPath) {
+        window.electronAPI.installAndUpdate(currentUpdateInfo.installerPath);
+      } else {
+        console.error('[UPDATE] Installer path not available');
+        window.electronAPI.installAndUpdate(); // Fallback sem path
+      }
     }, 1500);
   });
 </script>

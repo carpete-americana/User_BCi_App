@@ -66,8 +66,7 @@
       {
         "provider": "github",
         "owner": "carpete-americana",
-        "repo": "User_BCi_App",
-        "publishAutoUpdate": true
+        "repo": "User_BCi_App"
       }
     ],
     "win": {
