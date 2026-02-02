@@ -62,6 +62,24 @@ ipcMain.handle('storage:set', (e, k, v) => ElectronStorage.setItem(k, v));
 ipcMain.handle('storage:get', (e, k) => ElectronStorage.getItem(k));
 ipcMain.handle('storage:remove', (e, k) => ElectronStorage.removeItem(k));
 
+// IPC Handler - Check Server Status
+ipcMain.handle('app:checkServerStatus', async () => {
+  try {
+    const { API_CONFIG } = require('./config');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/list`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    
+    return response.ok;
+  } catch (e) {
+    return false;
+  }
+});
+
 // Setup updater handlers
 updater.setupUpdateHandlers();
 

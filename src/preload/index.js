@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     listAssetsJs: () => ipcRenderer.invoke('assets:listJs'),
     getLocalAsset: (path) => ipcRenderer.invoke('assets:getLocal', path),
     getDebugMode: () => ipcRenderer.invoke('app:getDebugMode'),
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    checkServerStatus: () => ipcRenderer.invoke('app:checkServerStatus'),
     rendererReady: () => ipcRenderer.send('renderer:ready'),
     navigate: (filePath) => ipcRenderer.invoke('navigate', filePath),
     clearBrowserCache: () => ipcRenderer.invoke('cache:clearBrowser'),

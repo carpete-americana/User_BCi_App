@@ -322,6 +322,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     showLoading();
 
+    // Check if server is available
+    if (window.electronAPI && typeof window.electronAPI.checkServerStatus === 'function') {
+      try {
+        const serverAvailable = await window.electronAPI.checkServerStatus();
+        if (!serverAvailable) {
+          console.error('[INIT] Server is unavailable');
+          hideLoading();
+          try {
+            window.location.replace('server-unavailable.html');
+          } catch (e) {
+            window.location.href = 'server-unavailable.html';
+          }
+          return;
+        }
+      } catch (e) {
+        console.warn('[INIT] Could not check server status:', e.message);
+      }
+    }
+
     // Load global JS assets first (utils/api)
     await loadAllAssetsJS().catch(e => console.warn('loadAllAssetsJS failed', e));
 
