@@ -8,6 +8,17 @@ let DEBUG = false; // Will be set from main process via IPC
 let routes = {};
 export let currentPage = null;
 
+// ============ GLOBAL ERROR BOUNDARY ============
+window.addEventListener('error', (event) => {
+  console.error('[GLOBAL ERROR]', event.message, event.filename, event.lineno);
+  // Não impede propagação para permitir debugging
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[UNHANDLED REJECTION]', event.reason);
+  // Não impede propagação para permitir debugging
+});
+
 // Load DEBUG mode from main process
 (async () => {
   try {
@@ -201,6 +212,8 @@ function generateSidebarMenu() {
     { route: 'casinoaccounts', name: routes.casinoaccounts?.title || 'Contas Casinos', icon: 'fa-dice' },
     { category: 'Ações' },
     { route: 'withdraw', name: routes.withdraw?.title || 'Levantamento', icon: 'fa-money-bill-wave' },
+    { category: 'Conta' },
+    { route: 'profile', name: routes.profile?.title || 'Perfil', icon: 'fa-user' },
   ];
   let out = '<ul>';
   for (const it of items) {

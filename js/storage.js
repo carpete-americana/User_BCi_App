@@ -5,6 +5,9 @@ const crypto = require('crypto')
 const fs = require('fs')
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
+// Versão do formato de encriptação (para migração futura)
+const ENCRYPTION_VERSION = 2;
+
 class ElectronStorage {
   constructor() {
     this.userDataPath = app.getPath('userData')
@@ -15,9 +18,75 @@ class ElectronStorage {
     // Carrega ou gera chave de encriptação
     const encryptionKey = this.getOrCreateEncryptionKey()
     
-    this.algorithm = 'aes-256-cbc'
-    this.key = crypto.scryptSync(encryptionKey, encryptionKey.slice(0, 16), 32) // key must be 32 bytes for aes-256
-    this.iv = Buffer.alloc(16, 0) // IV must be 16 bytes
+    this.algorithm = 'aes-256-gcm' // GCM é mais seguro que CBC
+    this.key = crypto.scryptSync(encryptionKey, encryptionKey.slice(0, 16), 32)
+    
+    // Migrar dados antigos se necessário
+    this.migrateOldData()
+  }
+  
+  /**
+   * Migra dados do formato antigo (IV fixo) para o novo (IV aleatório)
+   */
+  migrateOldData() {
+    if (this.data._encryptionVersion === ENCRYPTION_VERSION) {
+      return; // Já está no formato novo
+    }
+    
+    try {
+      // Tenta desencriptar com formato antigo e re-encriptar
+      const oldData = { ...this.data };
+      delete oldData._encryptionVersion;
+      
+      let needsMigration = false;
+      const newData = { _encryptionVersion: ENCRYPTION_VERSION };
+      
+      for (const [key, value] of Object.entries(oldData)) {
+        if (typeof value === 'string' && !value.includes(':')) {
+          // Formato antigo (sem IV prefixado)
+          try {
+            const decrypted = this.decryptLegacy(value);
+            if (decrypted) {
+              newData[key] = this.encrypt(decrypted);
+              needsMigration = true;
+            }
+          } catch (e) {
+            // Não é formato antigo ou está corrompido, mantém
+            newData[key] = value;
+          }
+        } else {
+          newData[key] = value;
+        }
+      }
+      
+      if (needsMigration) {
+        this.data = newData;
+        this.saveData();
+        console.log('[STORAGE] Migrated to new encryption format');
+      } else {
+        this.data._encryptionVersion = ENCRYPTION_VERSION;
+        this.saveData();
+      }
+    } catch (e) {
+      console.warn('[STORAGE] Migration failed, starting fresh:', e.message);
+      this.data = { _encryptionVersion: ENCRYPTION_VERSION };
+      this.saveData();
+    }
+  }
+  
+  /**
+   * Desencripta dados no formato antigo (IV fixo)
+   */
+  decryptLegacy(text) {
+    try {
+      const iv = Buffer.alloc(16, 0); // IV fixo antigo
+      const decipher = crypto.createDecipheriv('aes-256-cbc', this.key, iv);
+      let decrypted = decipher.update(text, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (e) {
+      return null;
+    }
   }
 
   getOrCreateEncryptionKey() {
@@ -76,21 +145,39 @@ class ElectronStorage {
   }
 
   encrypt(text) {
-    const cipher = crypto.createCipheriv(this.algorithm, this.key, this.iv)
-    let encrypted = cipher.update(text, 'utf8', 'hex')
-    encrypted += cipher.final('hex')
-    return encrypted
+    // Gera IV aleatório para cada encriptação (12 bytes para GCM)
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    // Formato: iv:authTag:encrypted
+    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
   }
 
   decrypt(text) {
     try {
-      const decipher = crypto.createDecipheriv(this.algorithm, this.key, this.iv)
-      let decrypted = decipher.update(text, 'hex', 'utf8')
-      decrypted += decipher.final('utf8')
-      return decrypted
+      // Verifica se é formato novo (com IV prefixado)
+      if (text.includes(':')) {
+        const parts = text.split(':');
+        if (parts.length === 3) {
+          const [ivHex, authTagHex, encrypted] = parts;
+          const iv = Buffer.from(ivHex, 'hex');
+          const authTag = Buffer.from(authTagHex, 'hex');
+          const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+          decipher.setAuthTag(authTag);
+          let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+          decrypted += decipher.final('utf8');
+          return decrypted;
+        }
+      }
+      
+      // Fallback para formato antigo
+      return this.decryptLegacy(text);
     } catch (error) {
+      console.error('[STORAGE] Erro ao desencriptar:', error.message);
       this.clearStorage();
-      console.error('Erro ao desencriptar storage:', error);
+      return null;
     }
   }
 

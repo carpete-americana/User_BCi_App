@@ -1,6 +1,6 @@
 // Frontend API cache module with hash-based validation
 const ElectronStorage = require('../../js/storage');
-const { API_CONFIG, GITHUB_CONFIG, DEBUG } = require('./config');
+const { API_CONFIG, DEBUG } = require('./config');
 const crypto = require('crypto');
 
 const STORAGE_PREFIX = API_CONFIG.STORAGE_PREFIX;
@@ -63,12 +63,12 @@ async function fetchHashesFromAPI() {
 }
 
 /**
- * Calcula hash MD5 de um conteúdo (primeiros 8 chars)
+ * Calcula hash SHA-256 de um conteúdo (primeiros 16 chars)
  */
 function calculateHash(content) {
   if (!content) return null;
-  const hash = crypto.createHash('md5').update(content).digest('hex');
-  return hash.substring(0, 8); // Primeiros 8 caracteres como a API faz
+  const hash = crypto.createHash('sha256').update(content).digest('hex');
+  return hash.substring(0, 16); // Primeiros 16 caracteres para maior segurança
 }
 
 /**
@@ -375,10 +375,19 @@ async function preloadFrequentPages() {
   }
 }
 
+// Referências para cleanup dos intervals
+let backgroundSyncInterval = null;
+let hashRefreshInterval = null;
+
 // Background cache refresh (updates cache without blocking)
 function startBackgroundSync() {
+  // Clear existing interval if any
+  if (backgroundSyncInterval) {
+    clearInterval(backgroundSyncInterval);
+  }
+  
   // Refresh cache every 30 minutes
-  setInterval(async () => {
+  backgroundSyncInterval = setInterval(async () => {
     if (!isOnline) return;
     
     DEBUG && console.log('[BACKGROUND SYNC] Starting cache refresh...');
@@ -409,11 +418,32 @@ function startBackgroundSync() {
  * Inicia refresh periódico de hashes
  */
 function startHashRefresh() {
+  // Clear existing interval if any
+  if (hashRefreshInterval) {
+    clearInterval(hashRefreshInterval);
+  }
+  
   // Busca hashes a cada 5 minutos
-  setInterval(async () => {
+  hashRefreshInterval = setInterval(async () => {
     DEBUG && console.log('[HASHES] Iniciando refresh periódico...');
     apiHashes = await fetchHashesFromAPI();
   }, 5 * 60 * 1000);
+}
+
+/**
+ * Para todos os intervals para cleanup graceful
+ */
+function stopAllIntervals() {
+  if (backgroundSyncInterval) {
+    clearInterval(backgroundSyncInterval);
+    backgroundSyncInterval = null;
+    DEBUG && console.log('[CACHE] Background sync stopped');
+  }
+  if (hashRefreshInterval) {
+    clearInterval(hashRefreshInterval);
+    hashRefreshInterval = null;
+    DEBUG && console.log('[CACHE] Hash refresh stopped');
+  }
 }
 
 module.exports = {
@@ -428,5 +458,6 @@ module.exports = {
   preloadFrequentPages,
   startBackgroundSync,
   startHashRefresh,
+  stopAllIntervals,
   fetchHashesFromAPI
 };

@@ -185,8 +185,17 @@ app.on('activate', () => {
 // Cleanup on quit
 app.on('before-quit', () => {
   DEBUG && console.log('[APP] Application quitting, cleaning up...');
+  
+  // Stop all intervals
+  cache.stopAllIntervals();
+  
+  // Unregister shortcuts
   shortcuts.unregisterShortcuts();
+  
+  // Destroy tray
   tray.destroyTray();
+  
+  DEBUG && console.log('[APP] Cleanup complete');
 });
 
 } // End of single instance lock else block

@@ -1,7 +1,7 @@
 {
   "name": "bci",
   "productName": "BCI",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "description": "Aplicação oficial BCI",
   "keywords": [
     "bci",
@@ -28,19 +28,16 @@
     "build:release": "electron-builder --publish always"
   },
   "dependencies": {
-    "child_process": "^1.0.2",
-    "crypto": "^1.0.1",
     "dotenv": "^16.5.0",
     "electron-log": "^5.4.2",
     "electron-updater": "^6.6.2",
-    "fs": "^0.0.1-security",
-    "node-fetch": "^3.3.2",
-    "path": "^0.12.7"
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "electron": "^35.1.4",
     "electron-builder": "^26.0.12",
     "electronmon": "^2.0.3",
+    "png-to-ico": "^3.0.1",
     "sharp": "^0.34.5"
   },
   "build": {

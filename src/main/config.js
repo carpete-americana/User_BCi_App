@@ -1,7 +1,8 @@
 // Configuration for Frontend API cache and app settings
 require('dotenv').config();
 
- const DEBUG = false; //process.env.DEBUG === 'true' || false;
+// DEBUG: auto-detecção em desenvolvimento, forçado a false em produção
+const DEBUG = process.env.NODE_ENV !== 'production' && process.env.DEBUG === 'true';
 
 // Frontend API configuration (replaces GitHub direct access)
 const API_CONFIG = {
@@ -17,29 +18,16 @@ const API_CONFIG = {
   CACHE_BUSTER: "",                       // Sem versioning - usa hashes para validação
 };
 
-// Legacy GitHub config - mantido para retrocompatibilidade se necessário
-const GITHUB_CONFIG = {
-  OWNER: "carpete-americana",
-  REPO: "bci-frontend",
-  BRANCH: DEBUG ? "testing" : "main",
-  STORAGE_PREFIX: "cache:",
-  DEFAULT_TTL: 24 * 60 * 60 * 1000,
-  PAGE_TTL: 1 * 60 * 60 * 1000,
-  ASSET_TTL: 12 * 60 * 60 * 1000,
-  CONFIG_TTL: 30 * 60 * 1000,
-  MAX_CACHE_AGE: 7 * 24 * 60 * 60 * 1000,
-};
-
 const routes = {
   dashboard: { title: "Dashboard", path: "dashboard", icon: "fa-chart-bar" },
   withdraw: { title: "Levantamento", path: "withdraw", icon: "fa-money-bill-wave" },
   rules: { title: "Regras", path: "rules", icon: "fa-scroll" },
-  casinoaccounts: { title: "Contas Casinos", path: "casinoaccounts", icon: "fa-dice" }
+  casinoaccounts: { title: "Contas Casinos", path: "casinoaccounts", icon: "fa-dice" },
+  profile: { title: "Perfil", path: "profile", icon: "fa-user" }
 };
 
 module.exports = {
   API_CONFIG,
-  GITHUB_CONFIG,
   DEBUG,
   routes
 };

@@ -204,14 +204,8 @@
     </div>
     
     <div class="profile-menu">
-        <a href="#" class="profile-menu-item" onclick="">
+        <a href="#profile" class="profile-menu-item" onclick="navigateTo('profile'); document.getElementById('profileCard').classList.remove('show');">
             <i class="fas fa-user-cog"></i> Perfil
-        </a>
-        <a href="#" class="profile-menu-item" onclick="">
-            <i class="fas fa-cog"></i> Definições
-        </a>
-        <a href="#" class="profile-menu-item" onclick="">
-            <i class="fas fa-shield-alt"></i> Segurança
         </a>
         <div class="profile-divider"></div>
         <button class="profile-menu-item logout-btn" onclick="logout()">
