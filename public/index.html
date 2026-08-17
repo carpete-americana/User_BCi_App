@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BCi</title>
+    <!-- Aplica o tema guardado antes do primeiro paint, para evitar flash claro->escuro -->
+    <script>
+        try {
+            var savedTheme = localStorage.getItem('bci_theme');
+            if (savedTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        } catch (e) { /* localStorage indisponível */ }
+    </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
@@ -169,11 +178,11 @@
         </div>
         
         <div class="header-right">
-            <div class="notification">
+            <div class="notification" id="notificationBell">
                 <i class="fas fa-bell"></i>
-                <!-- <span class="notification-badge">0</span> -->
+                <span class="notification-badge hidden" id="notificationBadge">0</span>
             </div>
-            
+
             <div class="user-profile">
                 <span class="user-name">Utilizador</span>
                 <div class="avatar-placeholder">
@@ -191,6 +200,13 @@
     <script type="module" src="../src/renderer/index.js"></script>
     </div>
 
+    <div class="notification-bell-dropdown" id="notificationBellDropdown">
+        <div class="notification-bell-header">
+            <h4>Notificações</h4>
+            <button class="notification-bell-mark-all" id="notificationMarkAllBtn">Marcar todas como lidas</button>
+        </div>
+        <div class="notification-bell-list" id="notificationBellList"></div>
+    </div>
 
     <div class="profile-card" id="profileCard">
     <div class="profile-header">
@@ -219,6 +235,7 @@
 document.querySelector('.user-profile').addEventListener('click', function(e) {
     e.stopPropagation();
     const card = document.getElementById('profileCard');
+    document.getElementById('notificationBellDropdown')?.classList.remove('show');
     card.classList.toggle('show');
 });
 

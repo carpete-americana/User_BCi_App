@@ -18,16 +18,10 @@ const API_CONFIG = {
   CACHE_BUSTER: "",                       // Sem versioning - usa hashes para validação
 };
 
-const routes = {
-  dashboard: { title: "Dashboard", path: "dashboard", icon: "fa-chart-bar" },
-  withdraw: { title: "Levantamento", path: "withdraw", icon: "fa-money-bill-wave" },
-  rules: { title: "Regras", path: "rules", icon: "fa-scroll" },
-  casinoaccounts: { title: "Contas Casinos", path: "casinoaccounts", icon: "fa-dice" },
-  profile: { title: "Perfil", path: "profile", icon: "fa-user" }
-};
+// Routes are now loaded from Frontend API via sidebar.js
+// Access via window.routes in renderer after loadAllAssetsJS()
 
 module.exports = {
   API_CONFIG,
-  DEBUG,
-  routes
+  DEBUG
 };

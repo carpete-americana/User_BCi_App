@@ -5,7 +5,10 @@ import { fetchWithCache, DEFAULT_TTL } from './utils/cache.js';
 
 let Utils = null;
 let DEBUG = false; // Will be set from main process via IPC
-let routes = {};
+let routes = {}; // Carregado da Frontend API via sidebar.js (window.routes)
+// Se o perfil do user não estiver aprovado, todas as navegações são forçadas para
+// 'setup' (exceto 'settings', sempre permitida). Ver checkSetupGate().
+let setupGateRoute = null;
 export let currentPage = null;
 
 // ============ GLOBAL ERROR BOUNDARY ============
@@ -166,8 +169,27 @@ async function executePageScript(route) {
 }
 
 /* Load HTML, CSS, JS for a route */
+/**
+ * Verifica se o perfil do user está aprovado — ver a mesma função em
+ * Website/js/index.js para a explicação completa (comportamento espelhado).
+ */
+async function checkSetupGate() {
+  try {
+    if (!window.API || typeof window.API.getSetupStatus !== 'function') return;
+    const response = await window.API.getSetupStatus();
+    if (!response.success) return;
+    const data = response.result.data || {};
+    // Um user pode ter vários perfis — a app só desbloqueia quando PELO MENOS UM
+    // está aprovado; perfis extra pendentes/rejeitados nunca voltam a bloquear.
+    setupGateRoute = data.hasApprovedProfile ? null : 'setup';
+  } catch (e) {
+    DEBUG && console.warn('[Setup Gate] check failed', e);
+  }
+}
+
 export async function loadPage(route) {
   if (!route) route = 'dashboard';
+  if (setupGateRoute && route !== setupGateRoute && route !== 'settings') route = setupGateRoute;
   if (route === currentPage) return;
   if (!routes[route]) route = 'dashboard';
   currentPage = route;
@@ -186,7 +208,7 @@ export async function loadPage(route) {
     // CSS and JS
     await injectCSSFromRoute(route);
     await executePageScript(route);
-    updateActiveMenu(route);
+    if (window.updateActiveMenu) window.updateActiveMenu(route);
     window.history.pushState({}, '', `#${route}`);
     
     // Track page load performance
@@ -199,48 +221,6 @@ export async function loadPage(route) {
   } finally {
     await hideLoading();
   }
-}
-
-/* Menu generation */
-function generateSidebarMenu() {
-  const menu = document.getElementById('sidebar-menu');
-  if (!menu) return;
-  const items = [
-    { category: 'Menu' },
-    { route: 'dashboard', name: routes.dashboard?.title || 'Dashboard', icon: 'fa-chart-bar' },
-    { route: 'rules', name: routes.rules?.title || 'Regras', icon: 'fa-scroll' },
-    { route: 'casinoaccounts', name: routes.casinoaccounts?.title || 'Contas Casinos', icon: 'fa-dice' },
-    { category: 'Ações' },
-    { route: 'withdraw', name: routes.withdraw?.title || 'Levantamento', icon: 'fa-money-bill-wave' },
-    { category: 'Conta' },
-    { route: 'profile', name: routes.profile?.title || 'Perfil', icon: 'fa-user' },
-  ];
-  let out = '<ul>';
-  for (const it of items) {
-    if (it.category) out += `<li><span class="category">${it.category}</span></li>`;
-    else {
-      const isActive = window.location.hash.substring(1) === it.route || (!window.location.hash && it.route === 'dashboard');
-      out += `<li><a href="#${it.route}" class="${isActive ? 'active' : ''}" data-route="${it.route}"><i class="menu-icon fas ${it.icon}"></i> ${it.name}</a></li>`;
-    }
-  }
-  out += '</ul>';
-  menu.innerHTML = out;
-  menu.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', (e) => {
-      const r = a.getAttribute('data-route');
-      if (r) {
-        e.preventDefault();
-        navigateTo(r);
-      }
-    });
-  });
-}
-
-/* Update active menu */
-function updateActiveMenu(route) {
-  document.querySelectorAll('#sidebar-menu a').forEach(link => {
-    link.classList.toggle('active', link.getAttribute('data-route') === route);
-  });
 }
 
 /* navigateTo */
@@ -275,6 +255,125 @@ async function isItBirthday() {
 }
 
 /* Init */
+// ============================================================================
+// SINO DE NOTIFICAÇÕES
+// ============================================================================
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function formatNotifTime(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `há ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `há ${days}d`;
+  return new Date(dateStr).toLocaleDateString('pt-PT');
+}
+
+function notifIconClass(type) {
+  return { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', error: 'fa-times-circle' }[type] || 'fa-info-circle';
+}
+
+async function refreshNotificationBadge() {
+  try {
+    const res = await window.API.getMyNotificationsUnreadCount();
+    const count = res?.result?.data?.count || 0;
+    const badge = document.getElementById('notificationBadge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 9 ? '9+' : String(count);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  } catch (e) { DEBUG && console.warn('[Notifications] badge refresh failed', e); }
+}
+
+async function loadNotificationBellList() {
+  const list = document.getElementById('notificationBellList');
+  if (!list) return;
+  list.innerHTML = '<div class="notification-bell-empty">A carregar...</div>';
+  try {
+    const res = await window.API.getMyNotifications(1, 20);
+    const items = res?.result?.data?.notifications || [];
+    if (items.length === 0) {
+      list.innerHTML = '<div class="notification-bell-empty">Sem notificações</div>';
+      return;
+    }
+    list.innerHTML = items.map(n => `
+      <div class="notification-bell-item ${n.is_read ? '' : 'unread'}" data-id="${n.id}" data-link="${n.link || ''}">
+        <div class="notification-bell-icon ${n.type || 'info'}"><i class="fas ${notifIconClass(n.type)}"></i></div>
+        <div class="notification-bell-body">
+          <div class="notification-bell-title">${escapeHtml(n.title)}</div>
+          <div class="notification-bell-message">${escapeHtml(n.message)}</div>
+          <div class="notification-bell-time">${formatNotifTime(n.created_at)}</div>
+        </div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.notification-bell-item').forEach(el => {
+      el.addEventListener('click', async () => {
+        const id = el.getAttribute('data-id');
+        const link = el.getAttribute('data-link');
+        if (el.classList.contains('unread')) {
+          el.classList.remove('unread');
+          try { await window.API.markNotificationRead(id); } catch (e) { /* ignore */ }
+          refreshNotificationBadge();
+        }
+        if (link) {
+          document.getElementById('notificationBellDropdown')?.classList.remove('show');
+          window.location.hash = link;
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="notification-bell-empty">Erro ao carregar notificações</div>';
+  }
+}
+
+function initNotificationBell() {
+  const bell = document.getElementById('notificationBell');
+  const dropdown = document.getElementById('notificationBellDropdown');
+  const markAllBtn = document.getElementById('notificationMarkAllBtn');
+  if (!bell || !dropdown) return;
+
+  bell.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isShowing = dropdown.classList.contains('show');
+    document.getElementById('profileCard')?.classList.remove('show');
+    if (isShowing) {
+      dropdown.classList.remove('show');
+    } else {
+      dropdown.classList.add('show');
+      loadNotificationBellList();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (dropdown.classList.contains('show') && !dropdown.contains(e.target) && e.target.closest('#notificationBell') === null) {
+      dropdown.classList.remove('show');
+    }
+  });
+
+  markAllBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await window.API.markAllNotificationsRead();
+      loadNotificationBellList();
+      refreshNotificationBadge();
+    } catch (err) { DEBUG && console.warn('[Notifications] mark all read failed', err); }
+  });
+
+  refreshNotificationBadge();
+  setInterval(refreshNotificationBadge, 60000);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Check version and clear cache if major update (1.x -> 2.x)
@@ -412,13 +511,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Authenticated: load global asset CSS
     await loadAllAssetsCSS().catch(e => console.warn('loadAllAssetsCSS failed', e));
 
-    routes = await window.electronAPI.loadRouteConfig();
-    generateSidebarMenu();
-    
+    // Sincronizar tema com o servidor (localStorage já aplicou um valor otimista no <head>)
+    if (window.API && typeof window.API.getMySettings === 'function') {
+      API.getMySettings().then(res => {
+        const themeSetting = res?.result?.data?.find?.(s => s.key === 'theme');
+        if (themeSetting) {
+          const theme = themeSetting.value === 'dark' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+          try { localStorage.setItem('bci_theme', theme); } catch (e) { /* ignore */ }
+        }
+      }).catch(e => console.warn('theme sync failed', e));
+    }
+
+    // Rotas e menu lateral carregados da Frontend API via sidebar.js (fonte única, partilhada com a Website)
+    routes = window.routes || {};
+    if (window.generateSidebarMenu) window.generateSidebarMenu();
+    initNotificationBell();
+    if (window.initSupportChat) window.initSupportChat();
+
+    await checkSetupGate();
+
     // Hide content while loading dashboard to prevent flash
     document.body.style.opacity = '0';
-    
-    const initialRoute = window.location.hash.substring(1) || 'dashboard';
+
+    const initialRoute = setupGateRoute || (window.location.hash.substring(1) || 'dashboard');
     await loadPage(initialRoute);
     await Utils.notification();
     
