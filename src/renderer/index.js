@@ -189,7 +189,13 @@ async function checkSetupGate() {
 
 export async function loadPage(route) {
   if (!route) route = 'dashboard';
-  if (setupGateRoute && route !== setupGateRoute && route !== 'settings') route = setupGateRoute;
+  // AS DEFINICOES TAMBEM NAO. Estavam de fora desta regra e eram a unica pagina
+  // a que se chegava com o registo por acabar — o resto da app mandava para o
+  // registo e aquela abria, o que parecia um buraco e nao uma decisao.
+  //
+  // Nao tranca ninguem: o "Terminar Sessao" vive no cartao de perfil, nao nas
+  // Definicoes.
+  if (setupGateRoute && route !== setupGateRoute) route = setupGateRoute;
   if (route === currentPage) return;
   if (!routes[route]) route = 'dashboard';
   currentPage = route;
