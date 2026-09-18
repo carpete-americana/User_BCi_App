@@ -1,4 +1,3 @@
-// UI utility functions
 export function showLoading() {
   if (document.getElementById('loading-overlay')) return;
   const loadingDiv = document.createElement('div');

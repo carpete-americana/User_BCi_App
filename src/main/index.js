@@ -1,4 +1,3 @@
-// Main process entry point
 require('dotenv').config();
 const { app, globalShortcut, ipcMain, BrowserWindow } = require('electron');
 const ElectronStorage = require('../../js/storage');
@@ -13,27 +12,22 @@ const security = require('./security');
 const metrics = require('./metrics');
 const assets = require('./assets');
 
-// IPC Handlers - GitHub Cache
 ipcMain.handle('github-cache:fetch', cache.handleFetch);
 ipcMain.handle('github-cache:fetchAsset', cache.handleFetchAsset);
 ipcMain.handle('github-cache:clear', cache.handleClear);
 ipcMain.handle('github-cache:clearAll', cache.handleClearAll);
 
-// IPC Handlers - Assets
 ipcMain.handle('assets:listCss', cache.listCssFiles);
 ipcMain.handle('assets:listJs', cache.listJsFiles);
 ipcMain.handle('assets:getLocal', (e, path) => assets.getAssetDataUrl(path));
 
-// IPC Handlers - Routes and Config (rotas carregadas da Frontend API via sidebar.js, window.routes)
 ipcMain.handle('app:getDebugMode', () => DEBUG);
 ipcMain.handle('app:getVersion', () => require('../../package.json').version);
 
-// IPC Handlers - Metrics
 ipcMain.handle('metrics:trackPageLoad', (e, pageName, startTime) => metrics.trackPageLoad(pageName, startTime));
 ipcMain.handle('metrics:trackFeature', (e, featureName) => metrics.trackFeatureUsage(featureName));
 ipcMain.handle('metrics:getSummary', () => metrics.getMetricsSummary());
 
-// IPC Handlers - Testing (DEV ONLY)
 if (DEBUG) {
   ipcMain.handle('test:simulateUpdate', () => {
     DEBUG && console.log('[TEST] Simulating update available');
@@ -42,11 +36,9 @@ if (DEBUG) {
   });
 }
 
-// IPC Handlers - Navigation and Auth
 ipcMain.handle('navigate', window.handleNavigate);
 ipcMain.handle('logout', window.handleLogout);
 
-// IPC Handlers - Cache Management
 ipcMain.handle('cache:clearBrowser', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (win) {
@@ -55,17 +47,15 @@ ipcMain.handle('cache:clearBrowser', async (e) => {
   }
 });
 
-// IPC Handlers - Storage
 ipcMain.handle('storage:set', (e, k, v) => ElectronStorage.setItem(k, v));
 ipcMain.handle('storage:get', (e, k) => ElectronStorage.getItem(k));
 ipcMain.handle('storage:remove', (e, k) => ElectronStorage.removeItem(k));
 
-// IPC Handler - Check Server Status
 ipcMain.handle('app:checkServerStatus', async () => {
   try {
     const { API_CONFIG } = require('./config');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    const timeout = setTimeout(() => controller.abort(), 5000);
     
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/list`, {
       signal: controller.signal
@@ -78,27 +68,21 @@ ipcMain.handle('app:checkServerStatus', async () => {
   }
 });
 
-// Setup updater handlers
 updater.setupUpdateHandlers();
 
-// Setup error handlers early
 errorHandler.setupErrorHandlers();
 
 let mainWindow = null;
 let appTray = null;
 
-// Single instance lock - prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  // Another instance is already running, quit this one
   DEBUG && console.log('[APP] Another instance detected, quitting...');
   app.quit();
 } else {
-  // This is the first instance, handle second-instance events
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     DEBUG && console.log('[APP] Second instance detected, showing existing window');
-    // Someone tried to run a second instance, we should focus our window instead
     if (mainWindow) {
       if (!mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -108,29 +92,22 @@ if (!gotTheLock) {
     }
   });
 
-// App lifecycle
 app.whenReady().then(() => {
   DEBUG && console.log('[APP] Application ready, initializing...');
   
-  // Setup metrics
   metrics.setupMetrics();
   
-  // Clean old logs and cache
   errorHandler.cleanOldLogs();
   cache.cleanOldCache();
   
-  // Create main window
   mainWindow = window.createWindow();
   
-  // Setup CSP security headers
   security.setupCSP(mainWindow.webContents.session);
   
-  // Setup keyboard shortcuts
   shortcuts.setupKeyboardShortcuts(() => {
     cache.handleClearAll();
   });
   
-  // Create system tray
   appTray = tray.createTray(
     () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -145,20 +122,16 @@ app.whenReady().then(() => {
     }
   );
   
-  // Monitor network status
   mainWindow.webContents.on('did-fail-load', () => {
     cache.setOnlineStatus(false);
   });
   
-  // Preload frequent pages after a short delay
   setTimeout(() => {
     cache.preloadFrequentPages();
   }, 5000);
   
-  // Start background sync
   cache.startBackgroundSync();
   
-  // Start hash refresh (valida integridade dos ficheiros a cada 5 minutos)
   cache.startHashRefresh();
   
   DEBUG && console.log('[APP] All features initialized');
@@ -166,8 +139,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // On macOS, keep app running in background
-  // On Windows/Linux, keep running if tray is active
+  // Com o tray ativo, a app continua a correr sem janelas.
   if (process.platform !== 'darwin' && !appTray) {
     app.quit();
   }
@@ -180,20 +152,16 @@ app.on('activate', () => {
   }
 });
 
-// Cleanup on quit
 app.on('before-quit', () => {
   DEBUG && console.log('[APP] Application quitting, cleaning up...');
   
-  // Stop all intervals
   cache.stopAllIntervals();
   
-  // Unregister shortcuts
   shortcuts.unregisterShortcuts();
   
-  // Destroy tray
   tray.destroyTray();
   
   DEBUG && console.log('[APP] Cleanup complete');
 });
 
-} // End of single instance lock else block
+}

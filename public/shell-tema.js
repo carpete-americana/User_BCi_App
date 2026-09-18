@@ -1,5 +1,4 @@
-// Extraído de index.html: estava num bloco <script> inline,
-// que obriga o CSP a manter script-src 'unsafe-inline'.
+// Aplica o tema guardado antes do primeiro paint.
 
 
 try {

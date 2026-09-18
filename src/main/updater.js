@@ -1,4 +1,3 @@
-// Auto-updater configuration and handlers
 const { autoUpdater } = require('electron-updater');
 const { BrowserWindow, ipcMain } = require('electron');
 const { DEBUG, API_CONFIG } = require('./config');
@@ -7,31 +6,21 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 
-// Configure auto-updater with better error handling
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
-autoUpdater.allowPrerelease = true; // Allow prerelease versions
+autoUpdater.allowPrerelease = true;
 autoUpdater.allowDowngrade = false;
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'debug';
 
-// Disable signature verification for development (enable in production with code signing)
 autoUpdater.disableWebInstaller = false;
 
-// Armazenar dados da última atualização disponível
 let updateInfo = null;
 let downloadInProgress = false;
-// Caminho do instalador que ESTE processo descarregou.
-//
-// É a única origem aceite na hora de instalar. Antes, o caminho era enviado ao
-// renderer no evento 'update-downloaded' e o renderer devolvia-o em
-// 'install-and-update' — o processo principal executava o que lhe dessem.
-// Quem conseguisse correr código no renderer escolhia o executável.
+// Caminho do instalador descarregado por este processo: é o único que se executa.
 let caminhoInstaladorDescarregado = null;
 
-/**
- * Verifica updates via backend (seguro, com rate limit do servidor)
- */
+/** Verifica atualizações através do backend. */
 async function checkForUpdatesViaBackend() {
   try {
     const apiUrl = `${API_CONFIG.BASE_URL}/check-update`;
@@ -49,8 +38,7 @@ async function checkForUpdatesViaBackend() {
       throw new Error(data.error || 'Unknown error');
     }
 
-    // Comparar versão
-    const latestVersion = data.latestVersion.replace(/^v/, ''); // Remove 'v' prefix
+    const latestVersion = data.latestVersion.replace(/^v/, '');
     const currentVersion = autoUpdater.currentVersion.toString();
 
     if (latestVersion !== currentVersion) {
@@ -65,7 +53,6 @@ async function checkForUpdatesViaBackend() {
         console.log('');
       }
       
-      // Notificar renderer
       const wins = BrowserWindow.getAllWindows();
       wins.forEach(win => {
         if (!win.isDestroyed()) {
@@ -90,13 +77,6 @@ async function checkForUpdatesViaBackend() {
   }
 }
 
-// Configure GitHub feed (fallback para dev mode sem backend)
-// Removed - usando backend exclusivamente agora
-
-// Event handlers - não são necessários pois usamos backend
-// Removed autoUpdater event listeners (checking-for-update, update-available, etc)
-
-// IPC handlers
 function setupUpdateHandlers() {
   ipcMain.on('download-update', async () => {
     if (DEBUG) console.log('[UPDATER] Starting update download');
@@ -112,7 +92,6 @@ function setupUpdateHandlers() {
       return;
     }
 
-    // Encontrar o .exe para Windows
     const winAsset = updateInfo.assets.find(a => a.name.endsWith('.exe'));
     if (!winAsset) {
       if (DEBUG) console.error('[UPDATER] Instalador Windows (.exe) não encontrado');
@@ -128,7 +107,6 @@ function setupUpdateHandlers() {
     downloadInProgress = true;
 
     try {
-      // Fazer download do arquivo
       const tempDir = path.join(app.getPath('temp'), 'bci-update');
       if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
@@ -142,7 +120,6 @@ function setupUpdateHandlers() {
         console.log('[UPDATER] Para:', installerPath);
       }
 
-      // Fazer fetch do arquivo
       const response = await fetch(winAsset.downloadUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -151,10 +128,8 @@ function setupUpdateHandlers() {
       const totalSize = parseInt(response.headers.get('content-length'), 10);
       let downloaded = 0;
 
-      // Escrever arquivo com stream real (ReadableStream)
       const fileStream = fs.createWriteStream(installerPath);
       
-      // Usar getReader() para ler o stream com progresso real
       try {
         const reader = response.body.getReader();
         
@@ -166,14 +141,12 @@ function setupUpdateHandlers() {
           downloaded += value.length;
           const percent = Math.round((downloaded / totalSize) * 100);
           
-          // Escrever chunk no arquivo
           fileStream.write(Buffer.from(value));
           
           if (DEBUG && percent % 10 === 0) {
             console.log(`[UPDATER] Download: ${percent}%`);
           }
 
-          // Enviar progresso para renderer
           const wins = BrowserWindow.getAllWindows();
           wins.forEach(win => {
             if (!win.isDestroyed()) {
@@ -188,23 +161,20 @@ function setupUpdateHandlers() {
         
         fileStream.end();
         
-        // Aguardar fim da escrita
         await new Promise((resolve, reject) => {
           fileStream.on('finish', resolve);
           fileStream.on('error', reject);
         });
         
       } catch (streamErr) {
-        // Fallback: download em chunks (sem stream)
+        // Alternativa sem stream: descarrega tudo e simula o progresso.
         const buffer = await response.arrayBuffer();
-        const chunkSize = 1024 * 1024; // 1MB chunks
+        const chunkSize = 1024 * 1024;
         const totalBuffer = Buffer.from(buffer);
         const chunkCount = Math.ceil(totalBuffer.length / chunkSize);
         
-        // Escrever arquivo
         fs.writeFileSync(installerPath, totalBuffer);
         
-        // Simular progresso com chunks
         for (let i = 0; i <= chunkCount; i++) {
           const percent = Math.round((i / chunkCount) * 100);
           
@@ -223,7 +193,6 @@ function setupUpdateHandlers() {
             }
           });
           
-          // Pequeno delay entre chunks para simular progresso
           await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
@@ -236,7 +205,6 @@ function setupUpdateHandlers() {
         console.log('[UPDATER] Arquivo baixado:', installerPath);
       }
 
-      // Notificar que download completou
       const wins = BrowserWindow.getAllWindows();
       wins.forEach(win => {
         if (!win.isDestroyed()) {
@@ -264,14 +232,7 @@ function setupUpdateHandlers() {
   });
 
   ipcMain.on('install-and-update', (event) => {
-    // O ARGUMENTO DO RENDERER É DELIBERADAMENTE IGNORADO.
-    //
-    // A assinatura antiga era (event, installerPath) e confiava nesse valor:
-    // copiava-o para appData e corria-o com /S (silencioso) através de um VBS.
-    // Ou seja, qualquer código a correr no renderer escolhia o executável — e
-    // as páginas do painel vêm da rede, não do disco.
-    //
-    // O caminho certo é o que o download desta sessão escreveu, e mais nenhum.
+    // O caminho vindo do renderer é ignorado: só se executa o instalador descarregado nesta sessão.
     const installerPath = caminhoInstaladorDescarregado;
     if (DEBUG) console.log('[UPDATER] Installing update and restarting app');
     if (DEBUG) console.log('[UPDATER] Installer:', installerPath);
@@ -285,14 +246,13 @@ function setupUpdateHandlers() {
 
       const { execFile } = require('child_process');
       
-      // Fechar todas as janelas e aguardar
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) {
           win.destroy();
         }
       });
 
-      // Executar o instalador com delay para permitir libertação completa do processo
+      // Espera 5 s para o processo libertar os ficheiros antes de instalar.
       if (DEBUG) console.log('[UPDATER] Agendando execução do instalador em 5s...');
       log.info('[UPDATER] Agendando execução do instalador:', installerPath);
       
@@ -309,7 +269,6 @@ function setupUpdateHandlers() {
           const fileName = path.basename(installerPath);
           const finalInstallerPath = path.join(bciPath, fileName);
           
-          // Copiar arquivo
           try {
             fs.copyFileSync(installerPath, finalInstallerPath);
             log.info('[UPDATER] Arquivo copiado para:', finalInstallerPath);
@@ -317,9 +276,9 @@ function setupUpdateHandlers() {
             log.warn('[UPDATER] Não foi possível copiar:', copyErr.message);
           }
           
-          // Criar script VBS para executar silenciosamente (sem console)
+          // Script VBS para correr o instalador sem janela de consola.
           const vbsPath = path.join(bciPath, 'run-installer.vbs');
-          const installDir = path.join(appDataPath, '..', 'Local', 'Programs', 'BCI'); // Diretório padrão
+          const installDir = path.join(appDataPath, '..', 'Local', 'Programs', 'BCI');
           const appExePath = path.join(installDir, 'BCI.exe');
           const vbsContent = `Set objShell = CreateObject("WScript.Shell")
 objShell.Run "${finalInstallerPath}" & " /S /D=" & "${installDir}", 0, True
@@ -331,7 +290,6 @@ objShell.Run "${appExePath}", 0, False`;
           log.info('[UPDATER] Instalador silencioso em:', installDir);
           log.info('[UPDATER] App será relançada em:', appExePath);
           
-          // Executar o VBS script (roda silenciosamente sem mostrar console)
           const { exec } = require('child_process');
           exec(`cscript.exe "${vbsPath}"`, { windowsHide: true }, (err) => {
             if (err) {
@@ -339,7 +297,6 @@ objShell.Run "${appExePath}", 0, False`;
             }
           });
 
-          // Sair imediatamente
           setTimeout(() => {
             if (DEBUG) console.log('[UPDATER] Saindo da app...');
             log.info('[UPDATER] App quit...');
@@ -360,9 +317,8 @@ objShell.Run "${appExePath}", 0, False`;
   });
 }
 
-// Check for updates (delayed start to avoid startup impact)
 function checkForUpdates() {
-  const checkInterval = DEBUG ? 2 * 60 * 1000 : 60 * 60 * 1000; // 2min em dev, 1h em prod (evita rate limit)
+  const checkInterval = DEBUG ? 2 * 60 * 1000 : 60 * 60 * 1000; // 2 min em desenvolvimento, 1 h em produção
   
   const performCheck = async () => {
     try {
@@ -372,7 +328,6 @@ function checkForUpdates() {
         console.log('[UPDATER] Versão local:', autoUpdater.currentVersion?.version || '?');
       }
       
-      // Tentar usar backend (mais seguro)
       await checkForUpdatesViaBackend();
       
     } catch (e) {
@@ -381,10 +336,8 @@ function checkForUpdates() {
     }
   };
   
-  // Initial check (delayed)
-  setTimeout(performCheck, 5 * 1000); // 5 seconds after startup
+  setTimeout(performCheck, 5 * 1000);
   
-  // Periodic checks in DEBUG mode
   if(DEBUG)
   setInterval(performCheck, checkInterval);
 }
@@ -395,7 +348,7 @@ module.exports = {
   simulateUpdateAvailable
 };
 
-// Testing helper - simulates update available (DEV ONLY)
+// Só para testes: simula uma atualização disponível.
 function simulateUpdateAvailable() {
   if (DEBUG) {
     console.log('');

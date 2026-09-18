@@ -181,7 +181,6 @@ body {
           if (window.electronAPI && typeof window.electronAPI.checkServerStatus === 'function') {
             const serverAvailable = await window.electronAPI.checkServerStatus();
             if (serverAvailable) {
-              // API está online, navegar de volta
               if (window.electronAPI && typeof window.electronAPI.navigate === 'function') {
                 window.electronAPI.navigate('index.html');
               }
@@ -194,13 +193,10 @@ body {
         }
       };
 
-      // Auto-retry a cada 5 segundos
       autoRetryInterval = setInterval(performRetry, 5000);
 
-      // Fazer primeira verificação após 2 segundos
       setTimeout(performRetry, 2000);
 
-      // Limpar intervalo se a janela fechar
       window.addEventListener('beforeunload', () => {
         clearInterval(autoRetryInterval);
       });

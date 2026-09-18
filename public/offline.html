@@ -35,7 +35,7 @@ body {
     align-items: center;
     height: 100vh;
     padding: 20px;
-    overflow: hidden; /* Impede o scroll na tela inteira */
+    overflow: hidden;
 }
 
 .bg {
@@ -43,7 +43,7 @@ body {
     background-image: linear-gradient(-60deg, var(--primary-color) 50%, var(--secondary-color) 50%);
     bottom: 0;
     left: -50%;
-    opacity: 1; /* Opacidade total */
+    opacity: 1;
     position: fixed;
     right: -50%;
     top: 0;
@@ -109,7 +109,7 @@ body {
         window.close();
       });
       window.addEventListener('online', () => {
-        // auto navigate back when connection restores, using IPC to avoid FOUC
+        // Volta atrás quando a ligação regressa, pelo IPC para evitar um flash sem estilos.
         try {
           if (window.electronAPI && typeof window.electronAPI.navigate === 'function') {
             window.electronAPI.navigate('index.html');

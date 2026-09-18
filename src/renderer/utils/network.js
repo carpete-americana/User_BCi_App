@@ -1,4 +1,3 @@
-// Network status banner utilities
 export function showOfflineBanner() {
   if (document.getElementById('offline-banner')) return;
   const banner = document.createElement('div');

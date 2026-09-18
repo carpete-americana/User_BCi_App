@@ -1,28 +1,22 @@
-// Main renderer process - loads pages and manages UI
 import { showLoading, hideLoading, showErrorPage } from './utils/ui.js';
 import { showOfflineBanner, hideOfflineBanner } from './utils/network.js';
 import { fetchWithCache, DEFAULT_TTL } from './utils/cache.js';
 
 let Utils = null;
-let DEBUG = false; // Will be set from main process via IPC
-let routes = {}; // Carregado da Frontend API via sidebar.js (window.routes)
-// Se o perfil do user não estiver aprovado, todas as navegações são forçadas para
-// 'setup' (exceto 'settings', sempre permitida). Ver checkSetupGate().
+let DEBUG = false;
+let routes = {}; // Carregado da Frontend API via sidebar.js (window.routes).
+// Sem perfil aprovado, todas as rotas vão para setup. Ver checkSetupGate().
 let setupGateRoute = null;
 export let currentPage = null;
 
-// ============ GLOBAL ERROR BOUNDARY ============
 window.addEventListener('error', (event) => {
   console.error('[GLOBAL ERROR]', event.message, event.filename, event.lineno);
-  // Não impede propagação para permitir debugging
 });
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('[UNHANDLED REJECTION]', event.reason);
-  // Não impede propagação para permitir debugging
 });
 
-// Load DEBUG mode from main process
 (async () => {
   try {
     DEBUG = await window.electronAPI.getDebugMode();
@@ -32,12 +26,10 @@ window.addEventListener('unhandledrejection', (event) => {
 })();
 
 
-/* CSS injection: injects <style data-page-css> with cached content */
 async function injectCSSFromRoute(route) {
   const cssPath = `${route}/styles.css`;
   try {
     const res = await fetchWithCache(cssPath);
-    // remove existing
     document.querySelectorAll('[data-page-css]').forEach(n => n.remove());
     const style = document.createElement('style');
     style.setAttribute('data-page-css', route);
@@ -48,7 +40,6 @@ async function injectCSSFromRoute(route) {
   }
 }
 
-/* Load all global asset CSS files from assets/css/ in the github repo */
 async function loadAllAssetsCSS() {
   try {
     let list = null;
@@ -69,7 +60,6 @@ async function loadAllAssetsCSS() {
       if (!filename || typeof filename !== 'string') continue;
       const path = `assets/css/${filename}`;
       try {
-        // skip if already injected
         if (document.querySelector(`style[data-asset-css="${path}"]`)) {
           DEBUG && console.log(`[loadAllAssetsCSS] already injected ${path}`);
           continue;
@@ -98,7 +88,7 @@ async function loadAllAssetsCSS() {
   }
 }
 
-/* Load all global asset JS files from assets/js/ with guaranteed order (utils.js, api.js first) */
+/* utils.js e api.js carregam primeiro. */
 async function loadAllAssetsJS() {
   try {
     let names = [];
@@ -111,7 +101,6 @@ async function loadAllAssetsJS() {
     }
     if (!Array.isArray(names) || names.length === 0) return;
 
-    // Ensure critical modules load first (utils, api)
     const critical = ['utils.js', 'api.js'];
     const ordered = [...critical.filter(c => names.includes(c)), ...names.filter(n => !critical.includes(n))];
 
@@ -146,7 +135,7 @@ async function loadAllAssetsJS() {
   }
 }
 
-/* Execute page script: import from blob so modules work */
+/* Importa o script da página a partir de um blob, para funcionar como módulo. */
 async function executePageScript(route) {
   const jsPath = `${route}/index.js`;
   try {
@@ -168,19 +157,14 @@ async function executePageScript(route) {
   }
 }
 
-/* Load HTML, CSS, JS for a route */
-/**
- * Verifica se o perfil do user está aprovado — ver a mesma função em
- * Website/js/index.js para a explicação completa (comportamento espelhado).
- */
+/** Mesmo comportamento que checkSetupGate em Website/js/index.js. */
 async function checkSetupGate() {
   try {
     if (!window.API || typeof window.API.getSetupStatus !== 'function') return;
     const response = await window.API.getSetupStatus();
     if (!response.success) return;
     const data = response.result.data || {};
-    // Um user pode ter vários perfis — a app só desbloqueia quando PELO MENOS UM
-    // está aprovado; perfis extra pendentes/rejeitados nunca voltam a bloquear.
+    // Basta um perfil aprovado para desbloquear.
     setupGateRoute = data.hasApprovedProfile ? null : 'setup';
   } catch (e) {
     DEBUG && console.warn('[Setup Gate] check failed', e);
@@ -189,12 +173,7 @@ async function checkSetupGate() {
 
 export async function loadPage(route) {
   if (!route) route = 'dashboard';
-  // AS DEFINICOES TAMBEM NAO. Estavam de fora desta regra e eram a unica pagina
-  // a que se chegava com o registo por acabar — o resto da app mandava para o
-  // registo e aquela abria, o que parecia um buraco e nao uma decisao.
-  //
-  // Nao tranca ninguem: o "Terminar Sessao" vive no cartao de perfil, nao nas
-  // Definicoes.
+  // As Definições também ficam bloqueadas; o Terminar Sessão está no cartão de perfil.
   if (setupGateRoute && route !== setupGateRoute) route = setupGateRoute;
   if (route === currentPage) return;
   if (!routes[route]) route = 'dashboard';
@@ -207,17 +186,14 @@ export async function loadPage(route) {
     const htmlRes = await fetchWithCache(`${route}/index.html`);
     const html = htmlRes.content;
     if (!html) throw new Error('HTML vazio');
-    // inject HTML
     document.getElementById('main-content').innerHTML = html;
     const meta = routes[route] || {};
     document.title = `${meta.title || route} | BCi`;
-    // CSS and JS
     await injectCSSFromRoute(route);
     await executePageScript(route);
     if (window.updateActiveMenu) window.updateActiveMenu(route);
     window.history.pushState({}, '', `#${route}`);
     
-    // Track page load performance
     if (window.electronAPI && window.electronAPI.trackPageLoad) {
       window.electronAPI.trackPageLoad(route, pageLoadStart);
     }
@@ -229,11 +205,9 @@ export async function loadPage(route) {
   }
 }
 
-/* navigateTo */
 window.navigateTo = async (route) => {
   await hideLoading();
   
-  // Track navigation feature usage
   if (window.electronAPI && window.electronAPI.trackFeature) {
     window.electronAPI.trackFeature(`navigate-${route}`);
   }
@@ -241,7 +215,6 @@ window.navigateTo = async (route) => {
   loadPage(route);
 };
 
-/* Birthday check */
 async function isItBirthday() {
   try {
     const user_response = await API.getUserData();
@@ -260,10 +233,7 @@ async function isItBirthday() {
   }
 }
 
-/* Init */
-// ============================================================================
-// SINO DE NOTIFICAÇÕES
-// ============================================================================
+// Sino de notificações
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -329,7 +299,7 @@ async function loadNotificationBellList() {
         const link = el.getAttribute('data-link');
         if (el.classList.contains('unread')) {
           el.classList.remove('unread');
-          try { await window.API.markNotificationRead(id); } catch (e) { /* ignore */ }
+          try { await window.API.markNotificationRead(id); } catch (e) { }
           refreshNotificationBadge();
         }
         if (link) {
@@ -381,10 +351,7 @@ function initNotificationBell() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Navegação pedida pelo menu do tray. Registado ANTES do resto do init: o
-  // clique no tray pode chegar a qualquer momento, e é aqui que o canal
-  // 'navigate-to' — que o processo principal já emitia sem ninguém do outro
-  // lado — passa finalmente a mudar de página.
+  // Registado antes do resto do arranque: o clique no tray pode chegar a qualquer momento.
   if (window.electronAPI && typeof window.electronAPI.onNavigateTo === 'function') {
     window.electronAPI.onNavigateTo((route) => {
       if (route) window.navigateTo(route);
@@ -398,37 +365,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
-    // Check version and clear cache if major update (1.x -> 2.x)
+    // Mudança de versão maior: limpa as caches.
     const currentVersion = await window.electronAPI.getVersion();
     const lastVersion = await window.electronStorage.getItem('app-version');
     
     if (lastVersion && lastVersion.startsWith('1.')) {
       DEBUG && console.log('[VERSION] Major update detected, clearing all caches');
-      // Clear GitHub cache
       await window.githubCache.clearAll();
-      // Clear browser cache
       if (window.electronAPI && window.electronAPI.clearBrowserCache) {
         await window.electronAPI.clearBrowserCache();
       }
-      // Store new version
       await window.electronStorage.setItem('app-version', currentVersion);
       DEBUG && console.log('[VERSION] Cache cleared, reloading...');
-      // Reload to get fresh content
       window.location.reload();
       return;
     }
     
-    // Store version if not set
     if (!lastVersion) {
       await window.electronStorage.setItem('app-version', currentVersion);
     }
     
-    // Network status banner handlers
     window.addEventListener('offline', () => {
       if (document.getElementById('offline-start-flag')) return;
       showOfflineBanner();
       
-      // Notify main process
       if (window.electronAPI && window.electronAPI.trackFeature) {
         window.electronAPI.trackFeature('network-offline');
       }
@@ -437,13 +397,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('online', () => {
       hideOfflineBanner();
       
-      // Notify main process
       if (window.electronAPI && window.electronAPI.trackFeature) {
         window.electronAPI.trackFeature('network-online');
       }
     });
 
-    // If we started offline, navigate to standalone offline page
     if (!navigator.onLine) {
       hideOfflineBanner();
       try {
@@ -456,7 +414,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     showLoading();
 
-    // Check if server is available
     if (window.electronAPI && typeof window.electronAPI.checkServerStatus === 'function') {
       try {
         const serverAvailable = await window.electronAPI.checkServerStatus();
@@ -475,19 +432,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    // Load global JS assets first (utils/api)
     await loadAllAssetsJS().catch(e => console.warn('loadAllAssetsJS failed', e));
 
     const session = await Utils.findSession(false);
     if (!session) {
-      // No session: load login page from GitHub repo
       try {
         showLoading();
         const htmlRes = await fetchWithCache('login/index.html');
         const html = htmlRes.content;
         if (!html) throw new Error('Login HTML vazio');
 
-        // Remove app chrome
         try {
           const chromeSelectors = ['.sidebar', '.main-header', '#update-badge', '.profile-card', '#sidebar-menu'];
           chromeSelectors.forEach(sel => {
@@ -497,25 +451,19 @@ document.addEventListener('DOMContentLoaded', async () => {
           DEBUG && console.warn('Could not remove chrome elements:', e.message);
         }
 
-        // Load CSS FIRST to prevent FOUC
         await injectCSSFromRoute('login');
         
-        // Then inject HTML
         document.body.innerHTML = html;
         document.title = 'Login | BCi';
         
-        // Execute page script
         await executePageScript('login');
         
-        // Hide loading and show page
         await hideLoading();
         
-        // Make body visible with smooth transition
         requestAnimationFrame(() => {
           document.body.classList.add('ready');
         });
 
-        // Signal renderer ready after everything is loaded and visible
         setTimeout(() => {
           window.electronAPI.rendererReady && window.electronAPI.rendererReady();
         }, 150);
@@ -524,28 +472,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         await hideLoading();
         showErrorPage(err, 'login');
         document.body.classList.add('ready');
-        // Still signal ready even on error so window shows
         window.electronAPI.rendererReady && window.electronAPI.rendererReady();
       }
       return;
     }
 
-    // Authenticated: load global asset CSS
     await loadAllAssetsCSS().catch(e => console.warn('loadAllAssetsCSS failed', e));
 
-    // Sincronizar tema com o servidor (localStorage já aplicou um valor otimista no <head>)
+    // Sincroniza o tema com o servidor (o <head> já aplicou o valor guardado).
     if (window.API && typeof window.API.getMySettings === 'function') {
       API.getMySettings().then(res => {
         const themeSetting = res?.result?.data?.find?.(s => s.key === 'theme');
         if (themeSetting) {
           const theme = themeSetting.value === 'dark' ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', theme);
-          try { localStorage.setItem('bci_theme', theme); } catch (e) { /* ignore */ }
+          try { localStorage.setItem('bci_theme', theme); } catch (e) { }
         }
       }).catch(e => console.warn('theme sync failed', e));
     }
 
-    // Rotas e menu lateral carregados da Frontend API via sidebar.js (fonte única, partilhada com a Website)
+    // Rotas e menu vêm da Frontend API (sidebar.js), partilhados com o Website.
     routes = window.routes || {};
     if (window.generateSidebarMenu) window.generateSidebarMenu();
     initNotificationBell();
@@ -553,7 +499,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await checkSetupGate();
 
-    // Hide content while loading dashboard to prevent flash
     document.body.style.opacity = '0';
 
     const initialRoute = setupGateRoute || (window.location.hash.substring(1) || 'dashboard');
@@ -562,13 +507,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await hideLoading();
     
-    // Make body visible with smooth fade-in
     requestAnimationFrame(() => {
       document.body.style.opacity = '1';
       document.body.classList.add('ready');
     });
 
-    // Signal main process that renderer is ready
     if (window.electronAPI && typeof window.electronAPI.rendererReady === 'function') {
       setTimeout(() => {
         window.electronAPI.rendererReady && window.electronAPI.rendererReady();
