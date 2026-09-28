@@ -45,7 +45,6 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: true,
       webSecurity: true
     },
   });
