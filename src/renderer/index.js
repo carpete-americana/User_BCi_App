@@ -9,6 +9,16 @@ let routes = {}; // Carregado da Frontend API via sidebar.js (window.routes).
 let setupGateRoute = null;
 export let currentPage = null;
 
+// A intro (public/intro.js) sai por cima da página; sem ela, o carregador sai de uma vez.
+async function revelarPagina() {
+  if (window.bciIntro) {
+    await window.bciIntro.terminar();
+  } else {
+    document.getElementById('initial-loader')?.remove();
+  }
+  document.body.classList.add('ready');
+}
+
 window.addEventListener('error', (event) => {
   console.error('[GLOBAL ERROR]', event.message, event.filename, event.lineno);
 });
@@ -453,16 +463,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         await injectCSSFromRoute('login');
         
-        document.body.innerHTML = html;
+        // Tira o resto do body sem mexer na intro: tirá-la do DOM recomeçava a animação.
+        const intro = document.getElementById('initial-loader');
+        if (intro) {
+          [...document.body.childNodes].forEach(n => { if (n !== intro) n.remove(); });
+          intro.insertAdjacentHTML('beforebegin', html);
+        } else {
+          document.body.innerHTML = html;
+        }
         document.title = 'Login | BCi';
         
         await executePageScript('login');
         
         await hideLoading();
-        
-        requestAnimationFrame(() => {
-          document.body.classList.add('ready');
-        });
+        await revelarPagina();
 
         setTimeout(() => {
           window.electronAPI.rendererReady && window.electronAPI.rendererReady();
@@ -471,7 +485,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Failed to load login page from repo', err);
         await hideLoading();
         showErrorPage(err, 'login');
-        document.body.classList.add('ready');
+        revelarPagina();
         window.electronAPI.rendererReady && window.electronAPI.rendererReady();
       }
       return;
@@ -499,18 +513,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await checkSetupGate();
 
-    document.body.style.opacity = '0';
-
     const initialRoute = setupGateRoute || (window.location.hash.substring(1) || 'dashboard');
     await loadPage(initialRoute);
     await Utils.notification();
     
     await hideLoading();
-    
-    requestAnimationFrame(() => {
-      document.body.style.opacity = '1';
-      document.body.classList.add('ready');
-    });
+    await revelarPagina();
 
     if (window.electronAPI && typeof window.electronAPI.rendererReady === 'function') {
       setTimeout(() => {
@@ -527,6 +535,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('renderer init error', err);
     await hideLoading();
     showErrorPage(err, 'dashboard');
-    document.body.classList.add('ready');
+    revelarPagina();
   }
 });
