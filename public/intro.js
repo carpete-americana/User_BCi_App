@@ -5,16 +5,26 @@
     if (!raiz) return;
 
     const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const T_INTRO = reduzido ? 0 : 2400; // fim da linha de carregamento no CSS (1.5s + .9s)
+    // Tema especial de uma conta, guardado no último login: coração no lugar do quadrado e uma dedicatória.
+    const amor = (() => { try { return localStorage.getItem('bci_tema_especial') === 'namoro'; } catch (e) { return false; } })();
+    // Fim da linha de carregamento no CSS (1.5s + .9s); com a dedicatória dá mais um segundo para se ler.
+    const T_INTRO = reduzido ? 0 : (amor ? 3400 : 2400);
 
     // Paths do logo (assets/icons/icon.svg). O buraco do "b" entra como segundo subpath, com evenodd.
     const B = 'M279 159h180v173l180 1 24 2 28 4 21 5 21 6 17 6 23 10 24 12 21 13 32 24 12 11 8 7 12 12 7 8 10 12 9 13 12 19 9 15 13 26 11 30 6 23 5 27 2 23v44l-2 27-4 23-9 34-7 19-15 31-14 24-12 17-10 13-9 10-12 13-13 13-11 9-15 12-19 13-13 8-27 14-26 11-31 10-30 7-31 4-12 1h-47l-26-3-31-6-25-7-29-11-26-12-25-14-12-8-14-10-16-13-16-15-10-10-7-8-11-13-14-19-12-19-15-29-7-16-11-33-5-22-3-17-2-31v-174h178v-137l-1-38h-178l-1-67v-106z'
         + 'M467 507h163l26 3 19 5 16 6 21 11 16 12 10 9 12 12 10 13 8 14 10 21 6 23 3 19 1 14-4 27-6 23-9 19-8 14-13 16-10 11-14 11-11 8-14 8-19 8-20 6-16 3-10 1h-22l-14-1-28-7-13-5-20-10-14-10-11-9-16-16-10-13-10-17-7-16-6-20-3-17-2-25v-150z';
     const QUADRADO = 'M279 159h180v45l-1 128-17 1h-162l-1-67v-106z';
+    // Coração com a caixa do quadrado (180x173 a partir de 279,159).
+    const CORACAO = 'M12 21s-7.5-4.6-10-9.3C.4 8.6 2.3 4.5 6.2 4.1c2.4-.2 4.4 1.1 5.8 3.1 1.4-2 3.4-3.3 5.8-3.1 3.9.4 5.8 4.5 4.2 7.6C19.5 16.4 12 21 12 21z';
     // Letras de assets/images/bci-extended.png, vectorizadas (a fonte da marca não existe como fonte).
     const LETRAS = 'M306.0 74.8 305.2 76.0 305.2 288.0 305.7 289.0 309.0 289.4 423.0 289.4 439.0 288.6 453.0 286.3 464.0 283.1 472.0 279.3 480.0 273.3 485.5 267.0 488.1 263.0 491.6 255.0 493.4 249.0 495.3 233.0 495.3 226.0 494.4 218.0 491.3 208.0 489.2 204.0 485.0 198.0 476.0 189.7 463.7 182.0 473.6 175.0 480.3 169.0 483.7 165.0 489.4 156.0 491.6 151.0 493.3 145.0 494.4 133.0 492.7 116.0 491.1 110.0 488.2 103.0 485.4 98.0 482.3 94.0 476.0 88.0 469.8 84.0 465.0 81.7 453.0 77.7 441.0 75.7 421.0 74.6ZM608.0 75.0 597.0 75.8 585.0 78.0 572.0 81.8 559.0 87.8 550.0 93.9 541.3 102.0 533.7 112.0 529.0 120.4 524.8 130.0 519.9 148.0 517.7 164.0 516.8 176.0 516.8 195.0 518.5 211.0 520.8 223.0 524.9 236.0 529.0 244.8 532.6 251.0 537.0 257.2 546.3 267.0 554.0 273.0 559.0 276.0 565.0 279.2 575.0 283.2 592.0 287.3 612.0 289.3 692.0 289.2 692.9 287.0 692.9 253.0 692.0 251.8 614.0 251.7 605.0 251.3 599.0 250.4 593.0 249.0 589.0 247.4 585.0 245.3 581.0 242.1 577.9 239.0 575.0 234.9 571.1 227.0 568.1 215.0 566.6 203.0 566.2 185.0 566.9 170.0 569.6 152.0 572.6 142.0 577.3 132.0 583.3 124.0 588.1 120.0 595.0 115.9 601.0 113.6 610.0 111.9 620.0 111.4 691.0 111.4 692.5 111.0 692.9 110.0 692.9 76.0 692.0 74.7ZM727.0 74.7 726.1 76.0 726.1 80.0 726.1 288.0 726.6 289.0 728.0 289.4 772.0 289.2 773.0 288.7 773.3 287.0 773.4 76.0 773.0 75.1 772.0 74.7ZM351.0 113.2 350.3 114.0 350.3 158.0 350.4 162.0 351.0 162.5 423.0 162.4 429.0 161.3 435.0 159.3 439.6 156.0 443.3 151.0 445.1 145.0 445.5 141.0 445.4 134.0 444.7 130.0 443.4 126.0 440.8 122.0 436.5 118.0 432.0 115.7 425.0 113.7 417.0 113.3ZM351.0 200.6 350.3 202.0 350.3 205.0 350.3 248.0 350.3 250.0 351.0 251.2 417.0 251.3 426.0 250.5 432.0 249.1 439.0 245.2 442.0 241.9 444.5 237.0 446.0 231.0 446.3 227.0 446.1 222.0 444.8 216.0 441.7 210.0 438.0 206.3 434.0 203.8 428.0 201.7 421.0 200.7Z';
     // Linha central do "b", do topo da haste à ponta da barra; desenhada na máscara, revela o logo.
     const TRACO = 'M373 470V668A250 250 0 1 0 625 418H440';
+
+    if (amor) raiz.classList.add('bi-amor');
+    const marcaCor = amor
+        ? `<g transform="translate(279.5 149) scale(7.6)"><path class="bi-quadrado" d="${CORACAO}"/></g>`
+        : `<path class="bi-quadrado" d="${QUADRADO}"/>`;
 
     raiz.innerHTML = `
         <div class="bi-luz bi-luz-1"></div>
@@ -30,10 +40,11 @@
                         </mask>
                     </defs>
                     <path class="bi-b" d="${B}" fill-rule="evenodd" mask="url(#biRevela)"/>
-                    <path class="bi-quadrado" d="${QUADRADO}"/>
+                    ${marcaCor}
                 </svg>
                 <svg class="bi-palavra" viewBox="305 74 470 216" aria-hidden="true"><path d="${LETRAS}" fill-rule="evenodd"/></svg>
             </div>
+            ${amor ? '<p class="bi-amor-texto">Olá Amor 🖤</p>' : ''}
             <div class="bi-linha"><i></i></div>
         </div>`;
 
@@ -50,6 +61,17 @@
         [data-theme="dark"] #initial-loader {
             --bi-fundo: #0f0f1a; --bi-logo: #E4E6EB; --bi-quadrado: #6366F1;
             --bi-luz-1: rgba(99, 102, 241, .2); --bi-luz-2: rgba(28, 130, 173, .14); --bi-trilho: rgba(228, 230, 235, .1);
+        }
+        #initial-loader.bi-amor {
+            --bi-fundo: #1B0811; --bi-logo: #F3E6EA; --bi-quadrado: #E8678F;
+            --bi-luz-1: rgba(178, 58, 98, .45); --bi-luz-2: rgba(90, 24, 56, .75); --bi-trilho: rgba(255, 255, 255, .12);
+        }
+        [data-theme="dark"] #initial-loader.bi-amor { --bi-fundo: #0C0809; --bi-luz-2: rgba(74, 21, 48, .6); }
+        .bi-amor-texto {
+            margin: -18px 0 -10px; color: var(--bi-logo);
+            font: 500 1.2rem/1.2 'Inter', system-ui, sans-serif; letter-spacing: .02em;
+            opacity: 0; transform: translateY(8px);
+            animation: bi-dedicatoria .8s cubic-bezier(.2, .7, .2, 1) 2.05s forwards;
         }
         #initial-loader:not(.bi-tocar), #initial-loader:not(.bi-tocar) * { animation-play-state: paused !important; }
 
@@ -127,6 +149,7 @@
         @keyframes bi-desliza { to { transform: translateX(0); } }
         @keyframes bi-desenrola { to { transform: translateX(0); clip-path: inset(-20% 0 -20% 0); } }
         @keyframes bi-aparece { to { opacity: 1; } }
+        @keyframes bi-dedicatoria { to { opacity: 1; transform: none; } }
         @keyframes bi-enche { to { transform: scaleX(.86); } }
         @keyframes bi-completa { from { transform: scaleX(.86); } to { transform: scaleX(1); } }
         @keyframes bi-brilho { from { left: -60px; } to { left: 212px; } }
