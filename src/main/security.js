@@ -6,16 +6,12 @@ const CSP_DIRECTIVES = {
   // Um atributo de evento ou um <script> inline deixa de correr; a consola indica qual.
   'script-src': [
     "'self'",
-    "'unsafe-eval'", // import() dinamico das paginas
-    "https://cdn.jsdelivr.net",
     "blob:" // as paginas sao importadas como modulos a partir de blobs
   ],
   // 'unsafe-inline' ainda é necessário no style-src: há atributos style= e blocos <style> por converter.
   'style-src': [
     "'self'",
     "'unsafe-inline'",
-    "https://fonts.googleapis.com",
-    "https://cdnjs.cloudflare.com"
   ],
   'img-src': [
     "'self'",
@@ -25,8 +21,6 @@ const CSP_DIRECTIVES = {
   ],
   'font-src': [
     "'self'",
-    "https://fonts.gstatic.com",
-    "https://cdnjs.cloudflare.com"
   ],
   'connect-src': [
     "'self'",
@@ -80,10 +74,6 @@ function isUrlSafe(url) {
       'raw.githubusercontent.com',
       'api.github.com',
       'bcibizz.pt',
-      'fonts.googleapis.com',
-      'fonts.gstatic.com',
-      'cdnjs.cloudflare.com',
-      'cdn.jsdelivr.net'
     ];
     
     const isAllowed = allowedDomains.some(domain => 
