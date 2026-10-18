@@ -133,14 +133,14 @@
     </div>
     
     <div class="profile-menu">
-        <a href="#profile" class="profile-menu-item" onclick="navigateTo('profile'); document.getElementById('profileCard').classList.remove('show');">
+        <a href="#profile" class="profile-menu-item" data-act="irParaPerfil" data-args="[]">
             <i class="fas fa-user-cog"></i> Perfil
         </a>
-        <a href="#settings" class="profile-menu-item" onclick="navigateTo('settings'); document.getElementById('profileCard').classList.remove('show');">
+        <a href="#settings" class="profile-menu-item" data-act="irParaDefinicoes" data-args="[]">
             <i class="fas fa-gear"></i> Definições
         </a>
         <div class="profile-divider"></div>
-        <button class="profile-menu-item logout-btn" onclick="logout()">
+        <button class="profile-menu-item logout-btn" data-act="logout" data-args="[]">
             <i class="fas fa-sign-out-alt"></i> Terminar Sessão
         </button>
     </div>

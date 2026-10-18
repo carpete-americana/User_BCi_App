@@ -225,6 +225,34 @@ window.navigateTo = async (route) => {
   loadPage(route);
 };
 
+// O CSP não deixa correr onclick inline: o cartão de perfil usa data-act (actions.js da Frontend API).
+window.irParaPerfil = () => {
+  navigateTo('profile');
+  document.getElementById('profileCard')?.classList.remove('show');
+};
+
+window.irParaDefinicoes = () => {
+  navigateTo('settings');
+  document.getElementById('profileCard')?.classList.remove('show');
+};
+
+/** Nome e email no topo e no cartão de perfil, como o updateGlobalUserInfo do Website; as páginas já não os escrevem. */
+async function mostrarUtilizador() {
+  try {
+    const response = await API.getUserData();
+    const userData = response?.result?.data;
+    if (!response?.success || !userData) return;
+    const fullname = userData.fullname || userData.full_name;
+    const userName = fullname
+      ? fullname.trim().split(/\s+/).filter((n, i, arr) => i === 0 || i === arr.length - 1).join(' ')
+      : 'Utilizador';
+    document.querySelectorAll('.user-name').forEach(el => { el.textContent = userName; });
+    document.querySelectorAll('.email-field').forEach(el => { el.textContent = userData.email || ''; });
+  } catch (err) {
+    DEBUG && console.warn('mostrarUtilizador falhou', err);
+  }
+}
+
 async function isItBirthday() {
   try {
     const user_response = await API.getUserData();
@@ -509,6 +537,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     routes = window.routes || {};
     if (window.generateSidebarMenu) window.generateSidebarMenu();
     initNotificationBell();
+    mostrarUtilizador();
     if (window.initSupportChat) window.initSupportChat();
 
     await checkSetupGate();
