@@ -15,7 +15,7 @@ const token = (id) => `x.${Buffer.from(JSON.stringify({ id })).toString('base64u
 /**
  * Cenário: `rotas` responde a "MÉTODO caminho" com { status, corpo } (ou lança); regista tudo o que se passou.
  */
-function cenario({ userId = 7, ativo = true, versaoServidor = VERSAO_TEXTO, resposta = 0, cifra = true, rotas = {} } = {}) {
+function cenario({ userId = 7, ativo = true, versaoServidor = VERSAO_TEXTO, resposta = 0, cifra = true, rotas = {}, extra = {} } = {}) {
   const chamadas = [];
   const guardado = new Map();
   const arranque = [];
@@ -56,7 +56,8 @@ function cenario({ userId = 7, ativo = true, versaoServidor = VERSAO_TEXTO, resp
     versoes: { so: 'win32 10.0.26300', electron: '44.4.5' },
     randomUUID: () => crypto.randomUUID(),
     setIntervalFn: (fn, ms) => { tique = { fn, ms }; return 1; },
-    clearIntervalFn: () => { tique = null; }
+    clearIntervalFn: () => { tique = null; },
+    ...extra
   };
   return {
     d: D.criarDispositivo(deps), chamadas, guardado, arranque, tray, caixas,
@@ -160,7 +161,7 @@ test('iniciar() agenda o sinal de 2 em 2 minutos e cada sinal vai ao dispositivo
   assert.equal(sinais.length >= 1, true);
   const id = c.guardado.get('dispositivo:7').deviceId;
   assert.equal(sinais.at(-1).caminho, `/users/me/devices/${id}/sinal`);
-  assert.deepEqual(sinais.at(-1).corpo, { appVersao: '2.2.0', electronVersao: '44.4.5', autostart: true });
+  assert.deepEqual(sinais.at(-1).corpo, { appVersao: '2.2.0', electronVersao: '44.4.5', autostart: true, capacidades: ['tarefas-v1'] });
   c.d.parar();
   assert.equal(c.tique(), null);
 });
@@ -367,4 +368,192 @@ test('a revogação fica pendente sempre que o servidor não a confirmou (não s
     assert.equal(c.guardado.get('dispositivo:7').revogarPendente, pendente, String(estado));
     assert.equal(c.guardado.get('dispositivo:7').consentido, false);
   }
+});
+
+// Fase 2: tarefas na resposta do sinal.
+
+const comTarefa = (tarefa) => ({ 'POST /users/me/devices/:id/sinal': { status: 200, corpo: { result: { data: { consentimentoValido: true, tarefa } } } } });
+const tarefaSimulada = (extra = {}) => ({ tarefaId: 31, tipo: 'levantar', simulada: true, parametros: { simular: 'ok' }, contaRotulo: 'Placard · conta 5', leaseAte: '2026-10-19T12:10:00Z', ...extra });
+
+function rotasTarefa(tarefa, registo) {
+  return {
+    ...comTarefa(tarefa),
+    'POST /users/me/devices/:id/tarefas/31/iniciar': () => { registo.push('iniciar'); return { status: 200, corpo: {} }; },
+    'POST /users/me/devices/:id/tarefas/31/concluir': (corpo) => { registo.push(['concluir', corpo]); return { status: 200, corpo: {} }; }
+  };
+}
+
+const semEspera = { esperar: async () => {}, aleatorio: () => 0, registar: () => {} };
+
+test('o registo e o sinal declaram a capacidade tarefas-v1', async () => {
+  const c = cenario({ extra: semEspera });
+  await c.d.aceitar();
+  assert.deepEqual(c.posts()[0].corpo.capacidades, ['tarefas-v1']);
+  c.d.iniciar();
+  await c.tique().fn();
+  assert.deepEqual(c.posts().filter(p => /sinal$/.test(p.caminho)).at(-1).corpo.capacidades, ['tarefas-v1']);
+});
+
+test('tarefa simulada no sinal: inicia e conclui pelas rotas da tarefa', async () => {
+  const registo = [];
+  const c = cenario({ rotas: rotasTarefa(tarefaSimulada(), registo), extra: semEspera });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.deepEqual(registo, ['iniciar', ['concluir', { estado: 'feita', resultado: { simulado: true, motivo: 'Simulação' } }]]);
+  const id = c.guardado.get('dispositivo:7').deviceId;
+  assert.ok(c.chamadas.some(x => x.caminho === `/users/me/devices/${id}/tarefas/31/iniciar`));
+});
+
+test('a mesma tarefa em dois sinais seguidos só se executa uma vez', async () => {
+  const registo = [];
+  const c = cenario({ rotas: rotasTarefa(tarefaSimulada(), registo), extra: semEspera });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.equal(registo.filter(r => r === 'iniciar').length, 1);
+});
+
+test('uma tarefa de cada vez: outra tarefa enquanto a primeira corre fica para depois', async () => {
+  let soltar;
+  const parado = new Promise(r => { soltar = r; });
+  const registo = [];
+  let tarefa = tarefaSimulada();
+  const rotas = {
+    'POST /users/me/devices/:id/sinal': () => ({ status: 200, corpo: { result: { data: { consentimentoValido: true, tarefa } } } }),
+    'POST /users/me/devices/:id/tarefas/31/iniciar': () => { registo.push('iniciar 31'); return { status: 200, corpo: {} }; },
+    'POST /users/me/devices/:id/tarefas/32/iniciar': () => { registo.push('iniciar 32'); return { status: 200, corpo: {} }; }
+  };
+  const c = cenario({ rotas, extra: { ...semEspera, esperar: () => parado } });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  tarefa = tarefaSimulada({ tarefaId: 32 });
+  await c.tique().fn();
+  assert.deepEqual(registo, ['iniciar 31']);
+  soltar();
+  await c.d.aguardarTarefa();
+});
+
+test('tarefa não simulada nunca chama iniciar', async () => {
+  const registo = [];
+  const avisos = [];
+  const c = cenario({ rotas: rotasTarefa(tarefaSimulada({ simulada: false }), registo), extra: { ...semEspera, registar: (m) => avisos.push(m) } });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.deepEqual(registo, []);
+  assert.equal(avisos.length, 1);
+});
+
+test('servidor antigo (sem tarefa na resposta) continua a funcionar', async () => {
+  const c = cenario({ extra: semEspera });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.equal(c.chamadas.filter(x => /tarefas/.test(x.caminho)).length, 0);
+  assert.deepEqual(c.tray.at(-1), true);
+});
+
+test('iniciar recusado (409): não conclui e a tarefa não volta a correr', async () => {
+  const registo = [];
+  const rotas = { ...rotasTarefa(tarefaSimulada(), registo), 'POST /users/me/devices/:id/tarefas/31/iniciar': () => { registo.push('iniciar'); return { status: 409, corpo: {} }; } };
+  const c = cenario({ rotas, extra: semEspera });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.deepEqual(registo, ['iniciar']);
+});
+
+test('nenhum pedido sai de /users/me/devices', async () => {
+  const registo = [];
+  const c = cenario({ rotas: rotasTarefa(tarefaSimulada({ parametros: { simular: 'falha' } }), registo), extra: semEspera });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.ok(c.chamadas.length > 2);
+  for (const x of c.chamadas) assert.ok(x.caminho.startsWith('/users/me/devices'), x.caminho);
+  assert.equal(registo.at(-1)[1].estado, 'falhada');
+});
+
+// Aviso ao abrir a app: leva ao consentimento, uma vez por versão do texto.
+
+const { AVISO } = require('../src/main/dispositivo-texto');
+
+test('ligada e sem resposta: o aviso leva ao diálogo de consentimento e regista', async () => {
+  const c = cenario({ resposta: 0 });
+  const r = await c.d.perguntarSeFaltar();
+  assert.equal(r.mostrado, true);
+  assert.deepEqual(c.caixas.map(x => x.buttons), [AVISO.botoes, ['Aceito', 'Cancelar']]);
+  assert.equal(c.guardado.get('dispositivo:7').consentido, true);
+  assert.equal(c.posts().length, 1, 'regista só depois do «Aceito»');
+});
+
+test('«Agora não» não abre o consentimento nem regista, e não volta a perguntar nesta versão', async () => {
+  const c = cenario({ resposta: 1 });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+  assert.equal(c.caixas.length, 1);
+  assert.equal(c.posts().length, 0);
+  assert.equal(c.guardado.get('dispositivo:7').consentido ?? false, false);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.caixas.length, 1);
+});
+
+test('versão nova do texto volta a perguntar uma vez', async () => {
+  const c = cenario({ resposta: 1 });
+  c.guardado.set('dispositivo:7', { perguntadoVersao: VERSAO_TEXTO - 1 });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+  assert.equal(c.guardado.get('dispositivo:7').perguntadoVersao, VERSAO_TEXTO);
+});
+
+test('já aceite nesta versão, funcionalidade desligada ou app desatualizada: não pergunta', async () => {
+  const aceite = cenario();
+  await aceite.d.aceitar();
+  aceite.caixas.length = 0;
+  assert.equal((await aceite.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(aceite.caixas.length, 0);
+
+  for (const c of [cenario({ ativo: false }), cenario({ versaoServidor: VERSAO_TEXTO + 1 })]) {
+    assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+    assert.equal(c.caixas.length, 0);
+    assert.equal(c.guardado.size, 0, 'nada fica marcado');
+  }
+});
+
+test('sem sessão ou com a janela escondida não pergunta nem marca; pergunta depois', async () => {
+  const c = cenario({ userId: null });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.chamadas.length, 0);
+  c.entrarComo(7);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+
+  let visivel = false;
+  const escondida = cenario({ resposta: 1, extra: { janelaVisivel: () => visivel } });
+  assert.equal((await escondida.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(escondida.chamadas.length, 0);
+  visivel = true;
+  assert.equal((await escondida.d.perguntarSeFaltar()).mostrado, true);
+});
+
+test('chamadas seguidas (carregar e navegar) mostram um só aviso', async () => {
+  const c = cenario({ resposta: 1 });
+  await Promise.all([c.d.perguntarSeFaltar(), c.d.perguntarSeFaltar(), c.d.perguntarSeFaltar()]);
+  assert.equal(c.caixas.length, 1);
+});
+
+test('sem rede não pergunta nem marca', async () => {
+  const c = cenario({ rotas: { 'GET /users/me/devices/config': new Error('offline') } });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.guardado.size, 0);
 });
