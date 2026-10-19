@@ -5,6 +5,8 @@ const DEBUG = process.env.NODE_ENV !== 'production' && process.env.DEBUG === 'tr
 
 const API_CONFIG = {
   BASE_URL: process.env.API_BASE_URL || "https://bcibizz.pt/frontend-api",
+  // A API de dados (o processo principal fala com ela nas operações automáticas).
+  API_URL: process.env.API_URL || "https://bcibizz.pt/api",
   FILES_ENDPOINT: "/files",
   API_ENDPOINT: "/api/file",
   STORAGE_PREFIX: "api-cache:",
