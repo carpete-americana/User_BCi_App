@@ -1,7 +1,9 @@
 require('dotenv').config();
-const { app, globalShortcut, ipcMain, BrowserWindow } = require('electron');
+const os = require('os');
+const crypto = require('crypto');
+const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, dialog } = require('electron');
 const ElectronStorage = require('../../js/storage');
-const { DEBUG } = require('./config');
+const { DEBUG, API_CONFIG } = require('./config');
 const cache = require('./cache');
 const updater = require('./updater');
 const window = require('./window');
@@ -11,6 +13,21 @@ const tray = require('./tray');
 const security = require('./security');
 const metrics = require('./metrics');
 const assets = require('./assets');
+const { criarDispositivo } = require('./dispositivo');
+const { criarApi } = require('./apiDados');
+
+// Operações automáticas neste computador: o consentimento é pedido aqui, num diálogo nativo, nunca pela página.
+const dispositivo = criarDispositivo({
+  api: criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) }),
+  lerToken: () => ElectronStorage.getItem('token'),
+  storage: ElectronStorage,
+  safeStorage,
+  app,
+  dialog,
+  tray: { setOperacoes: (ligado) => tray.setOperacoes(ligado) },
+  versoes: { so: `${process.platform} ${os.release()}`, electron: process.versions.electron },
+  randomUUID: () => crypto.randomUUID()
+});
 
 ipcMain.handle('github-cache:fetch', cache.handleFetch);
 ipcMain.handle('github-cache:fetchAsset', cache.handleFetchAsset);
@@ -37,7 +54,15 @@ if (DEBUG) {
 }
 
 ipcMain.handle('navigate', window.handleNavigate);
-ipcMain.handle('logout', window.handleLogout);
+ipcMain.handle('logout', (e) => {
+  dispositivo.aoTerminarSessao();
+  return window.handleLogout(e);
+});
+
+ipcMain.handle('dispositivo:estado', () => dispositivo.estado());
+ipcMain.handle('dispositivo:aceitar', () => dispositivo.aceitar());
+ipcMain.handle('dispositivo:revogar', () => dispositivo.revogar());
+ipcMain.handle('dispositivo:definirArranque', (e, ligado) => dispositivo.definirArranque(ligado === true));
 
 ipcMain.handle('cache:clearBrowser', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -133,6 +158,8 @@ app.whenReady().then(() => {
   cache.startBackgroundSync();
   
   cache.startHashRefresh();
+
+  dispositivo.iniciar();
   
   DEBUG && console.log('[APP] All features initialized');
   updater.checkForUpdates();
@@ -156,6 +183,8 @@ app.on('before-quit', () => {
   DEBUG && console.log('[APP] Application quitting, cleaning up...');
   
   cache.stopAllIntervals();
+
+  dispositivo.parar();
   
   shortcuts.unregisterShortcuts();
   
