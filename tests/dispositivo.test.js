@@ -284,3 +284,11 @@ test('aceitar outra vez depois de revogar reutiliza a mesma chave e o mesmo devi
   assert.equal(depois.chavePublica, antes.chavePublica);
   assert.equal(depois.consentido, true);
 });
+
+test('arrancarOculto só com o argumento --oculto', () => {
+  assert.equal(D.arrancarOculto(['C:\BCI.exe', '--oculto']), true);
+  assert.equal(D.arrancarOculto(['C:\BCI.exe']), false);
+  assert.equal(D.arrancarOculto([]), false);
+  assert.equal(D.arrancarOculto(undefined), false);
+  assert.equal(D.arrancarOculto(['--ocultox']), false);
+});

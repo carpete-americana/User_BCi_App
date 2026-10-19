@@ -203,4 +203,7 @@ function criarDispositivo(deps) {
   return { iniciar, parar, estado, aceitar, revogar, definirArranque, aoTerminarSessao };
 }
 
-module.exports = { criarDispositivo, gerarParDeChaves, userIdDoToken, SINAL_MS };
+/** O arranque com o Windows passa --oculto: a janela fica criada mas escondida (o tray abre-a). */
+const arrancarOculto = (argv) => Array.isArray(argv) && argv.includes('--oculto');
+
+module.exports = { criarDispositivo, gerarParDeChaves, userIdDoToken, arrancarOculto, SINAL_MS };
