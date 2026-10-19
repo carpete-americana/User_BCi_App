@@ -37,6 +37,8 @@ function criarDispositivo(deps) {
   const definirIntervalo = deps.setIntervalFn || setInterval;
   const limparIntervalo = deps.clearIntervalFn || clearInterval;
   let intervalo = null;
+  // O arranque do Windows só se reescreve quando muda (o cliente pode tê-lo desligado lá): esta marca diz que o desligámos nós.
+  let arranqueSuspenso = false;
 
   const chaveDe = (userId) => `dispositivo:${userId}`;
 
@@ -53,9 +55,18 @@ function criarDispositivo(deps) {
     app.setLoginItemSettings({ openAtLogin: !!ligado, args: ligado ? ['--oculto'] : [] });
   }
 
+  /** Sem sessão ou com a funcionalidade suspensa: desliga o arranque e o tray, uma vez, sem tocar no consentimento. */
+  function suspender() {
+    if (arranqueSuspenso) return;
+    arranqueSuspenso = true;
+    aplicarArranque(false);
+    tray.setOperacoes(false);
+  }
+
   /** Estado local → arranque e tray. */
   function aplicar(reg) {
     const ativo = !!reg?.consentido;
+    arranqueSuspenso = false;
     aplicarArranque(ativo && reg.autostart !== false);
     tray.setOperacoes(ativo);
   }
@@ -133,7 +144,8 @@ function criarDispositivo(deps) {
     let pendente = false;
     try {
       const r = await api.del(`${RAIZ}/${reg.deviceId}`);
-      pendente = r.status >= 500;
+      // Só 200 e 404 confirmam; o resto repete-se no sinal seguinte.
+      pendente = r.status !== 200 && r.status !== 404;
     } catch (e) {
       pendente = true;
     }
@@ -168,16 +180,26 @@ function criarDispositivo(deps) {
 
       if (reg.revogarPendente) {
         const r = await api.del(`${RAIZ}/${reg.deviceId}`);
-        if (r.status < 500) await storage.setItem(s.chave, { ...reg, revogarPendente: false });
+        if (r.status === 200 || r.status === 404) await storage.setItem(s.chave, { ...reg, revogarPendente: false });
         return;
       }
       if (!reg.consentido) return;
 
       const r = await api.post(`${RAIZ}/${reg.deviceId}/sinal`, { appVersao: app.getVersion(), electronVersao: versoes.electron, autostart: reg.autostart !== false });
+      if (r.status === 401 || r.status === 403) return suspender();
       if (r.status === 404) return desligarLocal(s, reg);
       if (r.status !== 200) return;
-      if (dadosDe(r)?.consentimentoValido === false) return desligarLocal(s, reg);
-      aplicar(reg);
+      const d = dadosDe(r);
+      if (d?.consentimentoValido === false) {
+        // Desligado no servidor ou conta suspensa pode passar: o consentimento fica e o sinal continua.
+        if (d.motivo === 'desligado' || d.motivo === 'conta') return suspender();
+        return desligarLocal(s, reg);
+      }
+      tray.setOperacoes(true);
+      if (arranqueSuspenso) {
+        arranqueSuspenso = false;
+        aplicarArranque(reg.autostart !== false);
+      }
     } catch (e) {
       // Sem rede ou erro do servidor: tenta-se no ciclo seguinte.
     }
@@ -196,6 +218,7 @@ function criarDispositivo(deps) {
 
   /** Logout: o arranque automático desliga-se, mas o consentimento fica (volta a valer no próximo login). */
   function aoTerminarSessao() {
+    arranqueSuspenso = true;
     aplicarArranque(false);
     tray.setOperacoes(false);
   }

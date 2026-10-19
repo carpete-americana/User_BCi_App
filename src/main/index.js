@@ -18,7 +18,7 @@ const { criarApi } = require('./apiDados');
 
 // Operações automáticas neste computador: o consentimento é pedido aqui, num diálogo nativo, nunca pela página.
 const dispositivo = criarDispositivo({
-  api: criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token') }),
+  api: criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) }),
   lerToken: () => ElectronStorage.getItem('token'),
   storage: ElectronStorage,
   safeStorage,

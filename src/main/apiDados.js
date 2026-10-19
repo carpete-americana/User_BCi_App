@@ -2,7 +2,7 @@
 
 /** Cliente HTTP do processo principal para a API de dados. Só usa o token da sessão e aborta ao fim do tempo limite. */
 
-function criarApi({ baseUrl, lerToken, fetchFn = fetch, tempoLimiteMs = 10000 }) {
+function criarApi({ baseUrl, lerToken, guardarToken = null, fetchFn = fetch, tempoLimiteMs = 10000 }) {
   async function pedir(metodo, caminho, corpo) {
     const token = await lerToken();
     if (!token) return { status: 401, corpo: null };
@@ -15,6 +15,11 @@ function criarApi({ baseUrl, lerToken, fetchFn = fetch, tempoLimiteMs = 10000 })
         body: corpo === undefined ? undefined : JSON.stringify(corpo),
         signal: controlo.signal
       });
+      // A API renova a sessão no cabeçalho; sem isto, com a janela escondida, o token acabava por caducar.
+      const renovado = res.headers?.get?.('X-Sessao-Renovada');
+      if (renovado && guardarToken) {
+        try { await guardarToken(renovado); } catch (e) { /* a resposta segue; tenta-se no pedido seguinte */ }
+      }
       return { status: res.status, corpo: await res.json().catch(() => null) };
     } finally {
       clearTimeout(temporizador);

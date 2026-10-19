@@ -47,3 +47,21 @@ test('um pedido que não responde é abortado ao fim do tempo limite', async () 
   const api = criarApi({ baseUrl: 'https://e.pt', lerToken: () => 't', fetchFn: fn, tempoLimiteMs: 20 });
   await assert.rejects(api.get('/x'), /abortado/);
 });
+
+test('o token renovado pelo servidor (X-Sessao-Renovada) é guardado; sem cabeçalho não se guarda nada', async () => {
+  const guardados = [];
+  const comCabecalho = async () => ({ status: 200, headers: { get: (n) => (n.toLowerCase() === 'x-sessao-renovada' ? 'novo.token.jwt' : null) }, json: async () => ({}) });
+  const semCabecalho = async () => ({ status: 200, headers: { get: () => null }, json: async () => ({}) });
+  const a = criarApi({ baseUrl: 'https://e.pt', lerToken: () => 'velho', fetchFn: comCabecalho, guardarToken: (t) => guardados.push(t) });
+  await a.get('/x');
+  assert.deepEqual(guardados, ['novo.token.jwt']);
+  const b = criarApi({ baseUrl: 'https://e.pt', lerToken: () => 'velho', fetchFn: semCabecalho, guardarToken: (t) => guardados.push(t) });
+  await b.get('/x');
+  assert.equal(guardados.length, 1);
+});
+
+test('guardar o token renovado nunca estraga a resposta', async () => {
+  const fn = async () => ({ status: 200, headers: { get: () => 'novo' }, json: async () => ({ ok: true }) });
+  const api = criarApi({ baseUrl: 'https://e.pt', lerToken: () => 't', fetchFn: fn, guardarToken: () => { throw new Error('disco cheio'); } });
+  assert.deepEqual(await api.get('/x'), { status: 200, corpo: { ok: true } });
+});

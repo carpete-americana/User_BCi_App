@@ -292,3 +292,79 @@ test('arrancarOculto só com o argumento --oculto', () => {
   assert.equal(D.arrancarOculto(undefined), false);
   assert.equal(D.arrancarOculto(['--ocultox']), false);
 });
+
+const invalido = (motivo) => ({ status: 200, corpo: { result: { data: { consentimentoValido: false, motivo } } } });
+const valido = { status: 200, corpo: { result: { data: { consentimentoValido: true } } } };
+
+test('os sinais válidos não reescrevem o arranque do Windows (o cliente pode tê-lo desligado lá)', async () => {
+  const c = cenario();
+  await c.d.aceitar();
+  const antes = c.arranque.length;
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.tique().fn();
+  assert.equal(c.arranque.length, antes);
+});
+
+test('«desligado» ou «conta» suspendem o arranque e o tray mas mantêm o consentimento, e voltam sozinhos', async () => {
+  let resposta = invalido('desligado');
+  const c = cenario({ rotas: { 'POST /users/me/devices/:id/sinal': () => resposta } });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  assert.equal(c.guardado.get('dispositivo:7').consentido, true, 'o consentimento fica');
+  assert.deepEqual(c.arranque.at(-1), { openAtLogin: false, args: [] });
+  assert.equal(c.tray.at(-1), false);
+
+  const n = c.arranque.length;
+  await c.tique().fn();
+  assert.equal(c.arranque.length, n, 'não repete o desligar a cada sinal');
+
+  resposta = valido;
+  await c.tique().fn();
+  assert.deepEqual(c.arranque.at(-1), { openAtLogin: true, args: ['--oculto'] });
+  assert.equal(c.tray.at(-1), true);
+  const m = c.arranque.length;
+  await c.tique().fn();
+  assert.equal(c.arranque.length, m, 'só restaura uma vez');
+});
+
+test('«versao» e «revogado» apagam o consentimento local de vez', async () => {
+  for (const motivo of ['versao', 'revogado']) {
+    const c = cenario({ rotas: { 'POST /users/me/devices/:id/sinal': invalido(motivo) } });
+    await c.d.aceitar();
+    c.d.iniciar();
+    await c.tique().fn();
+    assert.equal(c.guardado.get('dispositivo:7').consentido, false, motivo);
+  }
+});
+
+test('401 ou 403 no sinal são fim de sessão: desliga o arranque e o tray sem revogar, e restaura quando volta a valer', async () => {
+  for (const estado of [401, 403]) {
+    let resposta = { status: estado, corpo: {} };
+    const c = cenario({ rotas: { 'POST /users/me/devices/:id/sinal': () => resposta } });
+    await c.d.aceitar();
+    c.d.iniciar();
+    await c.tique().fn();
+    assert.deepEqual(c.arranque.at(-1), { openAtLogin: false, args: [] }, String(estado));
+    assert.equal(c.tray.at(-1), false);
+    assert.equal(c.guardado.get('dispositivo:7').consentido, true, 'não revoga');
+    assert.equal(c.chamadas.some(x => x.metodo === 'DELETE'), false);
+    const n = c.arranque.length;
+    await c.tique().fn();
+    assert.equal(c.arranque.length, n, 'não repete');
+    resposta = valido;
+    await c.tique().fn();
+    assert.deepEqual(c.arranque.at(-1), { openAtLogin: true, args: ['--oculto'] });
+  }
+});
+
+test('a revogação fica pendente sempre que o servidor não a confirmou (não só nos 5xx)', async () => {
+  for (const [estado, pendente] of [[401, true], [429, true], [500, true], [200, false], [404, false]]) {
+    const c = cenario({ rotas: { 'DELETE /users/me/devices/:id': { status: estado, corpo: {} } } });
+    await c.d.aceitar();
+    await c.d.revogar();
+    assert.equal(c.guardado.get('dispositivo:7').revogarPendente, pendente, String(estado));
+    assert.equal(c.guardado.get('dispositivo:7').consentido, false);
+  }
+});
