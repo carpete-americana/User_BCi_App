@@ -486,3 +486,74 @@ test('nenhum pedido sai de /users/me/devices', async () => {
   for (const x of c.chamadas) assert.ok(x.caminho.startsWith('/users/me/devices'), x.caminho);
   assert.equal(registo.at(-1)[1].estado, 'falhada');
 });
+
+// Aviso ao abrir a app: leva ao consentimento, uma vez por versão do texto.
+
+const { AVISO } = require('../src/main/dispositivo-texto');
+
+test('ligada e sem resposta: o aviso leva ao diálogo de consentimento e regista', async () => {
+  const c = cenario({ resposta: 0 });
+  const r = await c.d.perguntarSeFaltar();
+  assert.equal(r.mostrado, true);
+  assert.deepEqual(c.caixas.map(x => x.buttons), [AVISO.botoes, ['Aceito', 'Cancelar']]);
+  assert.equal(c.guardado.get('dispositivo:7').consentido, true);
+  assert.equal(c.posts().length, 1, 'regista só depois do «Aceito»');
+});
+
+test('«Agora não» não abre o consentimento nem regista, e não volta a perguntar nesta versão', async () => {
+  const c = cenario({ resposta: 1 });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+  assert.equal(c.caixas.length, 1);
+  assert.equal(c.posts().length, 0);
+  assert.equal(c.guardado.get('dispositivo:7').consentido ?? false, false);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.caixas.length, 1);
+});
+
+test('versão nova do texto volta a perguntar uma vez', async () => {
+  const c = cenario({ resposta: 1 });
+  c.guardado.set('dispositivo:7', { perguntadoVersao: VERSAO_TEXTO - 1 });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+  assert.equal(c.guardado.get('dispositivo:7').perguntadoVersao, VERSAO_TEXTO);
+});
+
+test('já aceite nesta versão, funcionalidade desligada ou app desatualizada: não pergunta', async () => {
+  const aceite = cenario();
+  await aceite.d.aceitar();
+  aceite.caixas.length = 0;
+  assert.equal((await aceite.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(aceite.caixas.length, 0);
+
+  for (const c of [cenario({ ativo: false }), cenario({ versaoServidor: VERSAO_TEXTO + 1 })]) {
+    assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+    assert.equal(c.caixas.length, 0);
+    assert.equal(c.guardado.size, 0, 'nada fica marcado');
+  }
+});
+
+test('sem sessão ou com a janela escondida não pergunta nem marca; pergunta depois', async () => {
+  const c = cenario({ userId: null });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.chamadas.length, 0);
+  c.entrarComo(7);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+
+  let visivel = false;
+  const escondida = cenario({ resposta: 1, extra: { janelaVisivel: () => visivel } });
+  assert.equal((await escondida.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(escondida.chamadas.length, 0);
+  visivel = true;
+  assert.equal((await escondida.d.perguntarSeFaltar()).mostrado, true);
+});
+
+test('chamadas seguidas (carregar e navegar) mostram um só aviso', async () => {
+  const c = cenario({ resposta: 1 });
+  await Promise.all([c.d.perguntarSeFaltar(), c.d.perguntarSeFaltar(), c.d.perguntarSeFaltar()]);
+  assert.equal(c.caixas.length, 1);
+});
+
+test('sem rede não pergunta nem marca', async () => {
+  const c = cenario({ rotas: { 'GET /users/me/devices/config': new Error('offline') } });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  assert.equal(c.guardado.size, 0);
+});
