@@ -35,7 +35,7 @@ function chaveDoNome(nome) {
   // Sem aproximações: o alias «esc» apanhava «Desconhecido», e aqui um engano mexe em dinheiro.
   const limpo = String(nome || '').trim().toLowerCase();
   if (!limpo) return null;
-  return Object.keys(C.CASINOS).find(k => C.CASINOS[k].nome.toLowerCase() === limpo || k === limpo.replace(/s+/g, '')) || null;
+  return Object.keys(C.CASINOS).find(k => C.CASINOS[k].nome.toLowerCase() === limpo || k === limpo.replace(/\s+/g, '')) || null;
 }
 
 /** «Deixar» leva os cêntimos; os outros modos euros inteiros. Devolve { valor } ou { saltar }. */

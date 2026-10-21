@@ -194,6 +194,10 @@ test('chaveDoNome: os nomes das contas dão a chave do casino', () => {
   assert.equal(chaveDoNome('Jogos Santa Casa'), null);
   assert.equal(chaveDoNome(null), null);
   assert.equal(chaveDoNome('Casino Desconhecido'), null);
+  // Sem espaços, sim; sem a letra «s», não (a regex antiga tirava os «s»).
+  assert.equal(chaveDoNome('Le Bull'), 'lebull');
+  assert.equal(chaveDoNome('Placards'), null);
+  assert.equal(chaveDoNome('Betanos'), null);
 });
 
 const CASOS_VALOR = [

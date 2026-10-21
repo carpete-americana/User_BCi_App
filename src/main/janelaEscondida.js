@@ -64,6 +64,7 @@ function criarJanela(accountId, deps) {
       return wc.mainFrame.executeJavaScript(codigoDe(nome, args));
     },
     // O caixa é um iframe de outra origem: corre nos frames do host dele e fica a primeira resposta.
+    // Nenhum respondeu e algum rebentou: lança, porque depois de Levantar o clique pode ter ido (verificar, não falhada).
     async naCaixa(nome, ...args) {
       const host = args[0]?.caixaHost;
       const frames = wc.mainFrame.framesInSubtree.filter((f) => {
@@ -71,12 +72,14 @@ function criarJanela(accountId, deps) {
         try { return new URL(f.url).hostname === host; } catch (e) { return false; }
       });
       const codigo = codigoDe(nome, args);
+      let rebentou = false;
       for (const frame of frames) {
         try {
           const r = await frame.executeJavaScript(codigo);
           if (r != null) return r;
-        } catch (e) { /* um frame que rebenta não impede os outros */ }
+        } catch (e) { rebentou = true; }
       }
+      if (rebentou) throw new Error('o caixa não respondeu');
       return null;
     }
   };

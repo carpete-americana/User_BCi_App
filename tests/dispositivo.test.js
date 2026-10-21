@@ -986,6 +986,21 @@ test('consentimento invalido no sinal e revogar() apagam os browsers das contas'
   assert.equal(apagados, antes + 1, 'revogar');
 });
 
+test('«desligado» e «conta» no sinal não apagam os browsers das contas (podem voltar)', async () => {
+  for (const motivo of ['desligado', 'conta']) {
+    let apagados = 0;
+    const c = cenario({
+      rotas: { 'POST /users/me/devices/:id/sinal': invalido(motivo) },
+      extra: { ...semEspera, limparParticoes: async () => { apagados++; } }
+    });
+    await c.d.aceitar();
+    c.d.iniciar();
+    await c.tique().fn();
+    await c.tique().fn();
+    assert.equal(apagados, 0, motivo);
+  }
+});
+
 test('uma falha ao apagar os browsers não impede a revogação', async () => {
   const avisos = [];
   const c = cenario({ extra: { ...semEspera, registar: (m) => avisos.push(m), limparParticoes: async () => { throw new Error('ocupado'); } } });

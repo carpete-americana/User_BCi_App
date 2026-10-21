@@ -264,9 +264,9 @@ function criarDispositivo(deps) {
       if (r.status !== 200) return;
       const d = dadosDe(r);
       if (d?.consentimentoValido === false) {
-        await apagarBrowsers();
-        // Desligado no servidor ou conta suspensa pode passar: o consentimento fica e o sinal continua.
+        // Desligado no servidor ou conta suspensa pode passar: o consentimento e os browsers das contas ficam.
         if (d.motivo === 'desligado' || d.motivo === 'conta') return suspender();
+        await apagarBrowsers();
         return desligarLocal(s, reg);
       }
       tray.setOperacoes(true);

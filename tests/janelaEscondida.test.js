@@ -101,6 +101,17 @@ test('naCaixa corre só nos frames do host do caixa e ignora os que rebentam', a
   assert.deepEqual(chamados, ['https://secure.safecharge.com/a', 'https://secure.safecharge.com/b']);
 });
 
+test('naCaixa: se nenhum frame respondeu e algum rebentou, lança; sem frames do caixa devolve null', async () => {
+  const frame = (url, resposta) => ({
+    url, executeJavaScript: async () => { if (resposta === 'erro') throw new Error('x'); return resposta; }
+  });
+  const host = { caixaHost: 'secure.safecharge.com' };
+  const rebenta = criarJanela(7, electronFalso({ frames: [frame('https://secure.safecharge.com/a', 'erro'), frame('https://secure.safecharge.com/b', null)] })).driver;
+  await assert.rejects(rebenta.naCaixa('confirmarLevantamento', host));
+  const nenhum = criarJanela(7, electronFalso({ frames: [frame('https://www.placard.pt/', 'erro')] })).driver;
+  assert.equal(await nenhum.naCaixa('confirmarLevantamento', host), null);
+});
+
 test('fechar destrói a janela e pode repetir-se', () => {
   const { BrowserWindow, estado } = electronFalso();
   const j = criarJanela(7, { BrowserWindow });
