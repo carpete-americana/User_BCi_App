@@ -1,7 +1,7 @@
 require('dotenv').config();
 const os = require('os');
 const crypto = require('crypto');
-const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, dialog, session } = require('electron');
+const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, session } = require('electron');
 const ElectronStorage = require('../../js/storage');
 const { DEBUG, API_CONFIG } = require('./config');
 const cache = require('./cache');
@@ -18,8 +18,9 @@ const { criarApi } = require('./apiDados');
 const { criarExecutorReal } = require('./executorReal');
 const { criarJanela, limparParticoes } = require('./janelaEscondida');
 const { levantarDaConta } = require('./levantar');
+const { pedirConsentimento } = require('./consentimentoJanela');
 
-// Operações automáticas neste computador: o consentimento é pedido aqui, num diálogo nativo, nunca pela página.
+// Operações automáticas neste computador: o consentimento é pedido aqui, numa janela local da app, nunca pela página.
 const apiDados = criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) });
 const particoes = { session, userData: app.getPath('userData') };
 
@@ -36,7 +37,11 @@ const dispositivo = criarDispositivo({
   storage: ElectronStorage,
   safeStorage,
   app,
-  dialog,
+  pedirConsentimento: (pedido) => pedirConsentimento(pedido, {
+    BrowserWindow,
+    ipcMain,
+    janelaPai: () => (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : null)
+  }),
   tray: { setOperacoes: (ligado) => tray.setOperacoes(ligado) },
   versoes: { so: `${process.platform} ${os.release()}`, electron: process.versions.electron },
   randomUUID: () => crypto.randomUUID(),
