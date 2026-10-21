@@ -51,7 +51,7 @@ function cenario({ userId = 7, ativo = true, versaoServidor = VERSAO_TEXTO, resp
       decryptString: (b) => b.toString().replace(/^cifrado:/, '')
     },
     app: { setLoginItemSettings: (o) => arranque.push(o), getVersion: () => '2.2.0' },
-    dialog: { showMessageBox: async (o) => { caixas.push(o); return { response: resposta }; } },
+    pedirConsentimento: async (o) => { caixas.push(o); return resposta === 0; },
     tray: { setOperacoes: (v) => tray.push(v) },
     versoes: { so: 'win32 10.0.26300', electron: '44.4.5' },
     randomUUID: () => crypto.randomUUID(),
@@ -109,7 +109,8 @@ test('aceitar com «Aceito» regista, guarda a chave privada cifrada, liga o arr
   const c = cenario();
   assert.deepEqual(await c.d.aceitar(), { ok: true });
   assert.equal(c.caixas.length, 1);
-  assert.deepEqual(c.caixas[0].buttons, ['Aceito', 'Cancelar']);
+  assert.deepEqual(c.caixas[0].botoes, ['Aceito', 'Cancelar']);
+  assert.equal(c.caixas[0].modo, 'pedido');
   const [post] = c.posts();
   assert.equal(post.caminho, '/users/me/devices');
   assert.match(post.corpo.deviceId, /^[0-9a-f-]{36}$/);
@@ -162,7 +163,7 @@ test('iniciar() agenda o sinal de 2 em 2 minutos e cada sinal vai ao dispositivo
   assert.equal(sinais.length >= 1, true);
   const id = c.guardado.get('dispositivo:7').deviceId;
   assert.equal(sinais.at(-1).caminho, `/users/me/devices/${id}/sinal`);
-  assert.deepEqual(sinais.at(-1).corpo, { appVersao: '2.2.0', electronVersao: '44.4.5', autostart: true, capacidades: ['tarefas-v1', 'pacotes-v1'], maquinaId: 'f'.repeat(64), estado: { pc: 'livre' } });
+  assert.deepEqual(sinais.at(-1).corpo, { appVersao: '2.2.0', electronVersao: '44.4.5', autostart: true, capacidades: ['tarefas-v1', 'pacotes-v1', 'levantar-v1'], maquinaId: 'f'.repeat(64), estado: { pc: 'livre' } });
   c.d.parar();
   assert.equal(c.tique(), null);
 });
@@ -389,12 +390,12 @@ const semEspera = { esperar: async () => {}, aleatorio: () => 0, registar: () =>
 test('o registo e o sinal declaram tarefas e pacotes, e levam o identificador cifrado da máquina', async () => {
   const c = cenario({ extra: semEspera });
   await c.d.aceitar();
-  assert.deepEqual(c.posts()[0].corpo.capacidades, ['tarefas-v1', 'pacotes-v1']);
+  assert.deepEqual(c.posts()[0].corpo.capacidades, ['tarefas-v1', 'pacotes-v1', 'levantar-v1']);
   assert.equal(c.posts()[0].corpo.maquinaId, 'f'.repeat(64));
   c.d.iniciar();
   await c.tique().fn();
   const s = c.posts().filter(p => /sinal$/.test(p.caminho)).at(-1).corpo;
-  assert.deepEqual(s.capacidades, ['tarefas-v1', 'pacotes-v1']);
+  assert.deepEqual(s.capacidades, ['tarefas-v1', 'pacotes-v1', 'levantar-v1']);
   assert.equal(s.maquinaId, 'f'.repeat(64));
   assert.deepEqual(s.estado, { pc: 'livre' });
 });
@@ -409,7 +410,7 @@ test('com o consentimento do texto v1 o sinal não leva o identificador da máqu
   await c.tique().fn();
   const s = c.posts().filter(p => /sinal$/.test(p.caminho)).at(-1).corpo;
   assert.equal('maquinaId' in s, false);
-  assert.deepEqual(s.capacidades, ['tarefas-v1', 'pacotes-v1']);
+  assert.deepEqual(s.capacidades, ['tarefas-v1', 'pacotes-v1', 'levantar-v1']);
 });
 
 test('tarefa simulada no sinal: inicia e conclui pelas rotas da tarefa', async () => {
@@ -613,18 +614,18 @@ test('a mesma tarefa reatribuída (outro lease) volta a correr; no mesmo lease n
 
 // Aviso ao abrir a app: leva ao consentimento, uma vez por versão do texto.
 
-const { AVISO } = require('../src/main/dispositivo-texto');
+const { AVISO, TEXTO_CONSENTIMENTO } = require('../src/main/dispositivo-texto');
 
 test('ligada e sem resposta: o aviso leva ao diálogo de consentimento e regista', async () => {
   const c = cenario({ resposta: 0 });
   const r = await c.d.perguntarSeFaltar();
   assert.equal(r.mostrado, true);
-  assert.deepEqual(c.caixas.map(x => x.buttons), [AVISO.botoes, ['Aceito', 'Cancelar']]);
+  assert.deepEqual(c.caixas.map(x => x.botoes), [AVISO.botoes, ['Aceito', 'Cancelar']]);
   assert.equal(c.guardado.get('dispositivo:7').consentido, true);
   assert.equal(c.posts().length, 1, 'regista só depois do «Aceito»');
 });
 
-test('«Agora não» não abre o consentimento nem regista, e não volta a perguntar nesta versão', async () => {
+test('«Agora não» não abre o pedido nem regista, e não volta a perguntar no mesmo dia', async () => {
   const c = cenario({ resposta: 1 });
   assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
   assert.equal(c.caixas.length, 1);
@@ -634,11 +635,43 @@ test('«Agora não» não abre o consentimento nem regista, e não volta a pergu
   assert.equal(c.caixas.length, 1);
 });
 
-test('versão nova do texto volta a perguntar uma vez', async () => {
-  const c = cenario({ resposta: 1 });
-  c.guardado.set('dispositivo:7', { perguntadoVersao: VERSAO_TEXTO - 1 });
+// A data é a local (AAAA-MM-DD): o relógio falso mostra que o dia seguinte volta a perguntar.
+const dia = (ano, mes, d, h = 12) => new Date(ano, mes - 1, d, h, 0, 0);
+
+test('«Agora não» grava o dia de hoje e só volta a perguntar no dia seguinte', async () => {
+  let agora = dia(2026, 10, 21);
+  const c = cenario({ resposta: 1, extra: { agora: () => agora } });
   assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
-  assert.equal(c.guardado.get('dispositivo:7').perguntadoVersao, VERSAO_TEXTO);
+  assert.equal(c.guardado.get('dispositivo:7').perguntadoEm, '2026-10-21');
+  agora = dia(2026, 10, 21, 23);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false, 'no mesmo dia');
+  assert.equal(c.caixas.length, 1);
+  agora = dia(2026, 10, 22, 0);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true, 'no dia seguinte');
+  assert.equal(c.caixas.length, 2);
+  assert.equal(c.guardado.get('dispositivo:7').perguntadoEm, '2026-10-22');
+});
+
+test('quem revogou volta a ver o pedido no dia seguinte', async () => {
+  let agora = dia(2026, 10, 21);
+  const c = cenario({ resposta: 1, extra: { agora: () => agora } });
+  // Como fica o registo depois de revogar: a chave e o deviceId mantêm-se, o consentimento não.
+  c.guardado.set('dispositivo:7', { deviceId: 'x', consentido: false, versao: VERSAO_TEXTO, revogarPendente: false });
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+  c.caixas.length = 0;
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, false);
+  agora = dia(2026, 10, 22);
+  assert.equal((await c.d.perguntarSeFaltar()).mostrado, true);
+});
+
+test('o aviso e o pedido usam a janela do consentimento, com os textos certos', async () => {
+  const c = cenario({ resposta: 0 });
+  const r = await c.d.perguntarSeFaltar();
+  assert.deepEqual(r, { mostrado: true, aceite: true });
+  assert.deepEqual(c.caixas.map(x => x.modo), ['aviso', 'pedido']);
+  assert.equal(c.caixas[0].titulo, AVISO.titulo);
+  assert.ok(c.caixas[0].texto.includes(AVISO.mensagem) && c.caixas[0].texto.includes(AVISO.detalhe));
+  assert.equal(c.caixas[1].texto, TEXTO_CONSENTIMENTO);
 });
 
 test('já aceite nesta versão, funcionalidade desligada ou app desatualizada: não pergunta', async () => {
@@ -745,7 +778,7 @@ test('o mesmo pacote no sinal seguinte não corre outra vez', async () => {
   assert.deepEqual(feitas, [1]);
 });
 
-test('conta não simulada: pára o pacote e larga o resto, sem iniciar nada', async () => {
+test('conta real sem executor real: pára o pacote e larga o resto, sem iniciar nada', async () => {
   const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: [{ tarefaId: 1, simulada: false, parametros: {} }, ...contasSimuladas(2)] };
   const c = cenario({ rotas: comPacote(pacote), extra: semEspera });
   await c.d.aceitar();
@@ -826,4 +859,190 @@ test('terminar a meio de uma pausa não espera por ela', async () => {
   await c.d.terminar();
   assert.deepEqual(feitas, [1]);
   assert.ok(c.chamadas.some(x => /pacotes\/9\/largar$/.test(x.caminho)));
+});
+
+// ---------- contas reais ----------
+
+const contaReal = (tarefaId) => ({ tarefaId, simulada: false, casino: 'Placard', parametros: {} });
+const limiteFalso = () => {
+  const pedidos = [];
+  return { pedidos, aguardarLimite: (ms) => { pedidos.push(ms); return { p: new Promise(() => {}), cancelar: () => {} }; } };
+};
+
+test('no pacote, a conta real vai ao executor real e a simulada ao fictício', async () => {
+  const reais = [];
+  const simuladas = [];
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: [contaReal(1), ...contasSimuladas(2)] };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: {
+      ...semEspera,
+      executor: async (t, io) => { await io.iniciar(1); simuladas.push(t.tarefaId); await io.concluir('feita', {}); },
+      executorReal: async (t, io) => { await io.iniciar(1); reais.push(t.tarefaId); await io.concluir('feita', {}); }
+    }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  assert.deepEqual(reais, [1]);
+  assert.deepEqual(simuladas, [2]);
+  assert.equal(c.chamadas.filter(x => x.caminho.endsWith('/largar')).length, 0);
+});
+
+test('o executor real recebe o contexto com a privada decifrada, e ela não está na tarefa nem no io', async () => {
+  let visto;
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: [contaReal(1)] };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: { ...semEspera, executorReal: async (t, io, ctx) => { visto = { t, io, ctx, privada: await ctx.privada() }; await io.iniciar(1); await io.concluir('feita', {}); } }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await c.d.aguardarTarefa();
+  const id = c.guardado.get('dispositivo:7').deviceId;
+  assert.equal(visto.ctx.deviceId, id);
+  assert.equal(Buffer.from(visto.privada, 'base64').length, 32);
+  assert.ok(!JSON.stringify(visto.t).includes(visto.privada));
+  assert.ok(!c.guardado.get('dispositivo:7').privadaCifrada.includes(visto.privada));
+});
+
+test('terminar com uma conta real a decorrer espera até ao limite das reais e acaba quando ela acaba', async () => {
+  let soltar;
+  const limite = limiteFalso();
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: [contaReal(1), contaReal(2)] };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: { ...semEspera, aguardarLimite: limite.aguardarLimite, executorReal: async (t, io) => { await io.iniciar(1); await new Promise(r => { soltar = r; }); await io.concluir('feita', {}); } }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await new Promise(r => setImmediate(r));
+  const fim = c.d.terminar();
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(limite.pedidos, [10 * 60 * 1000]);
+  soltar();
+  await fim;
+  assert.equal(c.d.ocupado(), false);
+  assert.ok(c.chamadas.some(x => x.caminho.endsWith('/pacotes/9/largar')), 'a segunda real larga-se');
+});
+
+test('terminar com uma conta simulada continua nos 60 s', async () => {
+  let soltar;
+  const limite = limiteFalso();
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: contasSimuladas(1) };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: { ...semEspera, aguardarLimite: limite.aguardarLimite, executor: async (t, io) => { await io.iniciar(1); await new Promise(r => { soltar = r; }); await io.concluir('feita', {}); } }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await new Promise(r => setImmediate(r));
+  const fim = c.d.terminar();
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(limite.pedidos, [60 * 1000]);
+  soltar();
+  await fim;
+});
+
+test('terminar durante a pausa entre duas reais não começa a seguinte nem espera', async () => {
+  const reais = [];
+  const limite = limiteFalso();
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [100, 100], contas: [contaReal(1), contaReal(2)] };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: {
+      ...semEspera, aguardarLimite: limite.aguardarLimite, esperar: () => new Promise(() => {}),
+      executorReal: async (t, io) => { await io.iniciar(1); reais.push(t.tarefaId); await io.concluir('feita', {}); }
+    }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setImmediate(r));
+  await c.d.terminar();
+  assert.deepEqual(reais, [1]);
+  assert.ok(c.chamadas.some(x => x.caminho.endsWith('/pacotes/9/largar')));
+  assert.ok(limite.pedidos.every(ms => ms === 60 * 1000), 'na pausa não é uma real a decorrer');
+});
+
+test('consentimento invalido no sinal e revogar() apagam os browsers das contas', async () => {
+  let apagados = 0;
+  const limparParticoes = async () => { apagados++; };
+  const c = cenario({
+    rotas: { 'POST /users/me/devices/:id/sinal': { status: 200, corpo: { result: { data: { consentimentoValido: false, motivo: 'revogado' } } } } },
+    extra: { ...semEspera, limparParticoes }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  assert.ok(apagados >= 1, 'sinal');
+  const antes = apagados;
+  await c.d.revogar();
+  assert.equal(apagados, antes + 1, 'revogar');
+});
+
+test('«desligado» e «conta» no sinal não apagam os browsers das contas (podem voltar)', async () => {
+  for (const motivo of ['desligado', 'conta']) {
+    let apagados = 0;
+    const c = cenario({
+      rotas: { 'POST /users/me/devices/:id/sinal': invalido(motivo) },
+      extra: { ...semEspera, limparParticoes: async () => { apagados++; } }
+    });
+    await c.d.aceitar();
+    c.d.iniciar();
+    await c.tique().fn();
+    await c.tique().fn();
+    assert.equal(apagados, 0, motivo);
+  }
+});
+
+test('uma falha ao apagar os browsers não impede a revogação', async () => {
+  const avisos = [];
+  const c = cenario({ extra: { ...semEspera, registar: (m) => avisos.push(m), limparParticoes: async () => { throw new Error('ocupado'); } } });
+  await c.d.aceitar();
+  const r = await c.d.revogar();
+  assert.equal(r.ok, true);
+  assert.equal(c.guardado.get('dispositivo:7').consentido, false);
+  assert.equal(avisos.length, 1);
+});
+
+test('revogar com uma conta real a meio: o executor vê deveParar, o pacote não segue e os browsers só se apagam no fim', async () => {
+  let soltar;
+  let ctxVisto;
+  let apagados = 0;
+  const reais = [];
+  const pacote = { pacoteId: 9, loteId: 5, pausaSeg: [0, 0], contas: [contaReal(1), contaReal(2)] };
+  const c = cenario({
+    rotas: comPacote(pacote),
+    extra: {
+      ...semEspera,
+      limparParticoes: async () => { apagados++; },
+      executorReal: async (t, io, ctx) => {
+        ctxVisto = ctx;
+        reais.push(t.tarefaId);
+        await io.iniciar(1);
+        await new Promise(r => { soltar = r; });
+        await io.concluir('falhada', {});
+      }
+    }
+  });
+  await c.d.aceitar();
+  c.d.iniciar();
+  await c.tique().fn();
+  await new Promise(r => setImmediate(r));
+  assert.equal(ctxVisto.deveParar(), false);
+  await c.d.revogar();
+  assert.equal(ctxVisto.deveParar(), true);
+  assert.equal(apagados, 0, 'não se apaga o browser de uma conta a meio');
+  soltar();
+  await c.d.aguardarTarefa();
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(reais, [1], 'a segunda conta não começa');
+  assert.equal(apagados, 1);
+  assert.ok(c.chamadas.some(x => x.caminho.endsWith('/pacotes/9/largar')));
 });

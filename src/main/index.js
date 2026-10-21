@@ -1,7 +1,7 @@
 require('dotenv').config();
 const os = require('os');
 const crypto = require('crypto');
-const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, dialog } = require('electron');
+const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, session } = require('electron');
 const ElectronStorage = require('../../js/storage');
 const { DEBUG, API_CONFIG } = require('./config');
 const cache = require('./cache');
@@ -15,15 +15,33 @@ const metrics = require('./metrics');
 const assets = require('./assets');
 const { criarDispositivo } = require('./dispositivo');
 const { criarApi } = require('./apiDados');
+const { criarExecutorReal } = require('./executorReal');
+const { criarJanela, limparParticoes } = require('./janelaEscondida');
+const { levantarDaConta } = require('./levantar');
+const { pedirConsentimento } = require('./consentimentoJanela');
 
-// Operações automáticas neste computador: o consentimento é pedido aqui, num diálogo nativo, nunca pela página.
+// Operações automáticas neste computador: o consentimento é pedido aqui, numa janela local da app, nunca pela página.
+const apiDados = criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) });
+const particoes = { session, userData: app.getPath('userData') };
+
 const dispositivo = criarDispositivo({
-  api: criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) }),
+  api: apiDados,
+  executorReal: criarExecutorReal({
+    api: apiDados,
+    raiz: (deviceId) => `/users/me/devices/${deviceId}`,
+    criarJanela: (accountId) => criarJanela(accountId, { BrowserWindow }),
+    levantar: levantarDaConta
+  }),
+  limparParticoes: () => limparParticoes(particoes),
   lerToken: () => ElectronStorage.getItem('token'),
   storage: ElectronStorage,
   safeStorage,
   app,
-  dialog,
+  pedirConsentimento: (pedido) => pedirConsentimento(pedido, {
+    BrowserWindow,
+    ipcMain,
+    janelaPai: () => (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : null)
+  }),
   tray: { setOperacoes: (ligado) => tray.setOperacoes(ligado) },
   versoes: { so: `${process.platform} ${os.release()}`, electron: process.versions.electron },
   randomUUID: () => crypto.randomUUID(),
@@ -195,6 +213,8 @@ app.on('before-quit', (evento) => {
   if (!aSair && dispositivo.ocupado()) {
     evento.preventDefault();
     aSair = true;
+    // A espera pode durar minutos: a app some em vez de ficar parada no ecrã.
+    BrowserWindow.getAllWindows().forEach(w => { if (!w.isDestroyed()) w.hide(); });
     dispositivo.terminar().catch(() => {}).finally(() => app.quit());
     return;
   }
