@@ -181,3 +181,61 @@ test('o HTML não tem scripts nem ligações externas e tem CSP fechada', () => 
   assert.doesNotMatch(html, /https?:\/\//i);
   assert.match(html, /Content-Security-Policy[^>]*default-src 'none'/);
 });
+
+// Uma janela por instância, cada uma com o seu webContents: é o que distingue quem responde.
+function ambienteVarias() {
+  const janelas = [];
+  class BrowserWindow {
+    constructor(opcoes) {
+      this.opcoes = opcoes;
+      this.eventos = {};
+      this.destruida = false;
+      this.webContents = { on: (ev, f) => { this.eventos[`wc:${ev}`] = f; }, setWindowOpenHandler() {} };
+      janelas.push(this);
+    }
+    once(ev, f) { this.eventos[ev] = f; }
+    on(ev, f) { this.eventos[ev] = f; }
+    loadFile(f, opcoes) { this.carregado = opcoes; }
+    show() {}
+    focus() {}
+    close() { if (this.destruida) return; this.destruida = true; this.eventos.closed?.(); }
+    isDestroyed() { return this.destruida; }
+  }
+  const canais = new Map();
+  const ipcMain = { on: (c, f) => canais.set(c, f), removeListener: (c, f) => { if (canais.get(c) === f) canais.delete(c); } };
+  const responder = (janela, aceite) => canais.get(CANAL)?.({ sender: janela.webContents }, aceite);
+  return { janelas, responder, deps: { BrowserWindow, ipcMain } };
+}
+
+test('com o aviso aberto, o pedido completo abre por cima e só a resposta dele conta', async () => {
+  const { janelas, responder, deps } = ambienteVarias();
+  const aviso = pedirConsentimento({ ...PEDIDO, modo: 'aviso' }, deps);
+  const pedido = pedirConsentimento(PEDIDO, deps);
+  assert.equal(janelas.length, 2, 'o pedido não reaproveita a janela do aviso');
+  assert.equal(janelas[0].destruida, true);
+  assert.equal(await aviso, false, 'o aviso fechado conta como «agora não»');
+  assert.equal(janelas[1].carregado.query.modo, 'pedido');
+  responder(janelas[0], true);
+  responder(janelas[1], false);
+  assert.equal(await pedido, false, 'o «sim» da janela do aviso não aceita o pedido');
+});
+
+test('o mesmo modo duas vezes reaproveita a janela aberta', async () => {
+  const { janelas, responder, deps } = ambienteVarias();
+  const a = pedirConsentimento(PEDIDO, deps);
+  const b = pedirConsentimento(PEDIDO, deps);
+  assert.equal(janelas.length, 1);
+  responder(janelas[0], true);
+  assert.equal(await a, true);
+  assert.equal(await b, true);
+});
+
+test('uma janela que não carrega fecha e responde «não», em vez de ficar pendurada', async () => {
+  const { janelas, deps } = ambienteVarias();
+  const p = pedirConsentimento(PEDIDO, deps);
+  janelas[0].eventos['wc:did-fail-load']();
+  assert.equal(await p, false);
+  assert.equal(janelas[0].destruida, true);
+  pedirConsentimento(PEDIDO, deps);
+  assert.equal(janelas.length, 2, 'depois disso volta a poder abrir');
+});

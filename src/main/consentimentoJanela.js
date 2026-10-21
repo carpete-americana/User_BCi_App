@@ -19,10 +19,12 @@ let aberta = null;
 /** Resolve true se o utilizador aceitar; false se recusar ou fechar a janela. */
 function pedirConsentimento({ modo, titulo, texto, botoes }, deps) {
   const { BrowserWindow, ipcMain } = deps;
-  if (aberta) {
+  if (aberta && aberta.modo === modo) {
     aberta.win.focus?.();
     return aberta.promessa;
   }
+  // O pedido não pode herdar a resposta do aviso: o aberto fecha (conta como «agora não») e este abre.
+  if (aberta) aberta.terminar(false);
   const pai = deps.janelaPai?.() || null;
   const posicao = {};
   if (pai) {
@@ -53,9 +55,10 @@ function pedirConsentimento({ modo, titulo, texto, botoes }, deps) {
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.once('ready-to-show', () => win.show());
 
+  let terminar;
   const promessa = new Promise((resolve) => {
     let fechada = false;
-    const terminar = (aceite) => {
+    terminar = (aceite) => {
       if (fechada) return;
       fechada = true;
       ipcMain.removeListener(CANAL, aoResponder);
@@ -69,8 +72,10 @@ function pedirConsentimento({ modo, titulo, texto, botoes }, deps) {
     };
     ipcMain.on(CANAL, aoResponder);
     win.on('closed', () => terminar(false));
+    // Sem isto, uma janela que não carrega nunca mostra nem responde, e o pedido seguinte devolvia esta promessa.
+    wc.on('did-fail-load', () => terminar(false));
   });
-  aberta = { win, promessa };
+  aberta = { win, promessa, modo, terminar };
 
   win.loadFile(FICHEIRO, { query: { modo, titulo, texto, aceitar: botoes[0], recusar: botoes[1] } });
   return promessa;
