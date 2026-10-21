@@ -28,11 +28,11 @@ function resultadoDe(r) {
 }
 
 /**
- * `raiz()` dá a rota do dispositivo; `privada()` a chave privada em base64 (só aqui é lida).
- * Devolve (tarefa, io) => Promise<void>, com a forma do executor fictício.
+ * `raiz(deviceId)` dá a rota do dispositivo; o contexto `ctx = { deviceId, privada() }` traz a chave privada em base64 (só aqui é lida).
+ * Devolve (tarefa, io, ctx) => Promise<void>, com a forma do executor fictício.
  */
-function criarExecutorReal({ api, raiz, privada, criarJanela, levantar, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
-  return async function executar(tarefa, io) {
+function criarExecutorReal({ api, raiz, criarJanela, levantar, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
+  return async function executar(tarefa, io, ctx) {
     const id = Number(tarefa.tarefaId);
     await io.iniciar(150);
 
@@ -41,7 +41,7 @@ function criarExecutorReal({ api, raiz, privada, criarJanela, levantar, setTimeo
 
     let dados;
     try {
-      const r = await api.post(`${raiz()}/tarefas/${id}/credenciais`, {});
+      const r = await api.post(`${raiz(ctx.deviceId)}/tarefas/${id}/credenciais`, {});
       if (r.status !== 200) {
         return io.concluir('falhada', { fase: 'credencial', motivo: `Credencial recusada (${r.status})` });
       }
@@ -52,7 +52,7 @@ function criarExecutorReal({ api, raiz, privada, criarJanela, levantar, setTimeo
 
     const credencial = { username: dados?.username, password: null };
     try {
-      credencial.password = decifrarEntrega(privada(), id, dados);
+      credencial.password = decifrarEntrega(await ctx.privada(), id, dados);
     } catch (e) {
       return io.concluir('falhada', { fase: 'credencial', motivo: 'Não foi possível abrir a credencial' });
     }

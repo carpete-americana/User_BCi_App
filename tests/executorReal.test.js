@@ -29,8 +29,7 @@ function montar({ status = 200, motor, resposta, relogio = {} } = {}) {
   const chamadas = { criarJanela: [], levantar: [] };
   const executar = criarExecutorReal({
     api,
-    raiz: () => '/users/me/devices/D1',
-    privada: () => vetor.privada,
+    raiz: (deviceId) => `/users/me/devices/${deviceId}`,
     criarJanela: (...a) => { chamadas.criarJanela.push(a); registo.push({ janela: 'criar' }); return janela; },
     levantar: async (driver, pedido, aoPasso) => {
       chamadas.levantar.push([driver, pedido]);
@@ -41,7 +40,8 @@ function montar({ status = 200, motor, resposta, relogio = {} } = {}) {
     },
     ...relogio
   });
-  return { executar, io, registo, chamadas };
+  const ctx = { deviceId: 'D1', privada: async () => vetor.privada };
+  return { executar: (tarefa, io) => executar(tarefa, io, ctx), io, registo, chamadas };
 }
 
 const concluido = (registo) => registo.find(x => x.io === 'concluir');
