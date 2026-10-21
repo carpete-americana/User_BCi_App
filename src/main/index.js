@@ -18,6 +18,7 @@ const { criarApi } = require('./apiDados');
 const { criarExecutorReal } = require('./executorReal');
 const { criarJanela, limparParticoes } = require('./janelaEscondida');
 const { levantarDaConta } = require('./levantar');
+const { depositarDaConta } = require('./depositar');
 const { pedirConsentimento } = require('./consentimentoJanela');
 
 // Operações automáticas neste computador: o consentimento é pedido aqui, numa janela local da app, nunca pela página.
@@ -29,8 +30,9 @@ const dispositivo = criarDispositivo({
   executorReal: criarExecutorReal({
     api: apiDados,
     raiz: (deviceId) => `/users/me/devices/${deviceId}`,
-    criarJanela: (accountId) => criarJanela(accountId, { BrowserWindow }),
-    levantar: levantarDaConta
+    criarJanela: (accountId, opcoes) => criarJanela(accountId, { BrowserWindow }, opcoes),
+    levantar: levantarDaConta,
+    depositar: depositarDaConta
   }),
   limparParticoes: () => limparParticoes(particoes),
   lerToken: () => ElectronStorage.getItem('token'),
