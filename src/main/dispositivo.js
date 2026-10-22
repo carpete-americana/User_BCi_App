@@ -19,6 +19,7 @@ const TERMINAR_MAX_MS = 60 * 1000;
 const RAIZ = '/users/me/devices';
 // O servidor só entrega tarefas a quem declara saber fazê-las.
 const CAPACIDADES = ['tarefas-v1', 'pacotes-v1', 'levantar-v1', 'depositar-v1'];
+const CAPACIDADES_REAIS = ['levantar-v1', 'depositar-v1'];
 const VISTAS_MAX = 50;
 const CONCLUIR_TENTATIVAS = 4;
 // O identificador da máquina só vai com o consentimento do texto que fala dele.
@@ -56,6 +57,8 @@ function criarDispositivo(deps) {
   const executor = deps.executor || executorFicticio.executar;
   // Sem executorReal as contas reais não correm: o pacote pára e larga o resto.
   const executorReal = deps.executorReal || null;
+  // Sem Chrome nem Edge o PC não anuncia levantamentos nem depósitos reais, e a fila não lhos entrega.
+  const capacidades = () => (deps.contasReais && !deps.contasReais() ? CAPACIDADES.filter(c => !CAPACIDADES_REAIS.includes(c)) : CAPACIDADES);
   const limparParticoes = deps.limparParticoes || (async () => 0);
   const aguardarLimite = deps.aguardarLimite || ((ms) => {
     let t;
@@ -165,7 +168,7 @@ function criarDispositivo(deps) {
     try {
       r = await api.post(RAIZ, {
         deviceId: reg.deviceId, chavePublica: reg.chavePublica, so: versoes.so, appVersao: app.getVersion(),
-        electronVersao: versoes.electron, autostart: true, versao: VERSAO_TEXTO, capacidades: CAPACIDADES, maquinaId: await lerMaquina()
+        electronVersao: versoes.electron, autostart: true, versao: VERSAO_TEXTO, capacidades: capacidades(), maquinaId: await lerMaquina()
       });
     } catch (e) {
       return { ok: false, motivo: 'rede' };
@@ -259,7 +262,7 @@ function criarDispositivo(deps) {
 
       const r = await api.post(`${RAIZ}/${reg.deviceId}/sinal`, {
         appVersao: app.getVersion(), electronVersao: versoes.electron, autostart: reg.autostart !== false,
-        capacidades: CAPACIDADES, ...(reg.versao >= VERSAO_COM_MAQUINA && { maquinaId: await lerMaquina() }), estado: estadoPc
+        capacidades: capacidades(), ...(reg.versao >= VERSAO_COM_MAQUINA && { maquinaId: await lerMaquina() }), estado: estadoPc
       });
       if (r.status === 401 || r.status === 403) return suspender();
       if (r.status === 404) { await apagarBrowsers(); return desligarLocal(s, reg); }
