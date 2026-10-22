@@ -35,7 +35,7 @@ const dispositivo = criarDispositivo({
     criarJanela: async (casino, opcoes) => {
       const browser = encontrarBrowser();
       if (!browser) throw new Error('sem Chrome nem Edge');
-      return abrirBrowserReal(casino, { puppeteer, browser, pastaPerfis: particoes.userData }, opcoes);
+      return abrirBrowserReal(casino, { puppeteer, browser, pastaPerfis: particoes.userData, ecras: () => screen.getAllDisplays() }, opcoes);
     },
     levantar: levantarDaConta,
     depositar: depositarDaConta
