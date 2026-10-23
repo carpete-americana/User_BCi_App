@@ -3,6 +3,7 @@ const path = require('path');
 const ElectronStorage = require('../../js/storage');
 const { DEBUG } = require('./config');
 const { arrancarOculto } = require('./dispositivo');
+const { opcoesBarra, seguirMaximizada } = require('./barraJanela');
 
 function loadWindowState() {
   const state = ElectronStorage.getItem('window-state');
@@ -41,6 +42,7 @@ function createWindow() {
     minHeight: 800,
     show: false,
     fullscreenable: true,
+    ...opcoesBarra(),
     icon: icon,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -77,6 +79,7 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  seguirMaximizada(win);
   win.setMenu(null);
   win.loadFile(path.join(__dirname, '../../public/index.html'));
   

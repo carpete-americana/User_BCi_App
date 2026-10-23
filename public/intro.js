@@ -7,8 +7,12 @@
     const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Tema especial de uma conta, guardado no último login: coração no lugar do quadrado e uma dedicatória.
     const amor = (() => { try { return localStorage.getItem('bci_tema_especial') === 'namoro'; } catch (e) { return false; } })();
+    // Logo a seguir a um login a intro acabou de se ver: passa depressa (a marca vem do login).
+    const curta = (() => {
+        try { const v = sessionStorage.getItem('bci_intro_curta') === '1'; sessionStorage.removeItem('bci_intro_curta'); return v; } catch (e) { return false; }
+    })();
     // Fim da linha de carregamento no CSS (1.5s + .9s); com a dedicatória dá mais um segundo para se ler.
-    const T_INTRO = reduzido ? 0 : (amor ? 3400 : 2400);
+    const T_INTRO = reduzido || curta ? 0 : (amor ? 3400 : 2400);
 
     // Paths do logo (assets/icons/icon.svg). O buraco do "b" entra como segundo subpath, com evenodd.
     const B = 'M279 159h180v173l180 1 24 2 28 4 21 5 21 6 17 6 23 10 24 12 21 13 32 24 12 11 8 7 12 12 7 8 10 12 9 13 12 19 9 15 13 26 11 30 6 23 5 27 2 23v44l-2 27-4 23-9 34-7 19-15 31-14 24-12 17-10 13-9 10-12 13-13 13-11 9-15 12-19 13-13 8-27 14-26 11-31 10-30 7-31 4-12 1h-47l-26-3-31-6-25-7-29-11-26-12-25-14-12-8-14-10-16-13-16-15-10-10-7-8-11-13-14-19-12-19-15-29-7-16-11-33-5-22-3-17-2-31v-174h178v-137l-1-38h-178l-1-67v-106z'
@@ -22,6 +26,7 @@
     const TRACO = 'M373 470V668A250 250 0 1 0 625 418H440';
 
     if (amor) raiz.classList.add('bi-amor');
+    if (curta) raiz.classList.add('bi-curta');
     const marcaCor = amor
         ? `<g transform="translate(279.5 149) scale(7.6)"><path class="bi-quadrado" d="${CORACAO}"/></g>`
         : `<path class="bi-quadrado" d="${QUADRADO}"/>`;
@@ -160,6 +165,9 @@
         @keyframes bi-deriva-1 { to { transform: translate(-6vmax, -5vmax) scale(1.08); } }
         @keyframes bi-deriva-2 { to { transform: translate(5vmax, 4vmax) scale(1.1); } }
 
+        /* Intro curta: o logo aparece já feito; a cortina continua a subir. */
+        #initial-loader.bi-curta .bi-centro, #initial-loader.bi-curta .bi-centro * { animation-duration: .01ms !important; animation-delay: 0s !important; }
+        #initial-loader.bi-curta .bi-linha::after { display: none; }
         @media (max-width: 380px) { .bi-centro { transform: scale(.85); } }
         @media (prefers-reduced-motion: reduce) {
             #initial-loader *, #initial-loader { animation-duration: .01ms !important; animation-delay: 0s !important; }

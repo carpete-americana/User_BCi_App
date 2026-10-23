@@ -11,6 +11,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     checkServerStatus: () => ipcRenderer.invoke('app:checkServerStatus'),
     rendererReady: () => ipcRenderer.send('renderer:ready'),
     navigate: (filePath) => ipcRenderer.invoke('navigate', filePath),
+    // Botões da janela (não há barra do sistema); sem argumentos.
+    janela: {
+        plataforma: process.platform,
+        minimizar: () => ipcRenderer.send('janela:minimizar'),
+        maximizar: () => ipcRenderer.send('janela:maximizar'),
+        fechar: () => ipcRenderer.send('janela:fechar'),
+        aoMaximizar: (cb) => ipcRenderer.on('janela:maximizada', (e, sim) => cb && cb(sim === true)),
+    },
     clearBrowserCache: () => ipcRenderer.invoke('cache:clearBrowser'),
     
     trackPageLoad: (pageName, startTime) => ipcRenderer.invoke('metrics:trackPageLoad', pageName, startTime),
