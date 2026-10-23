@@ -1,3 +1,4 @@
+import { mostrarSemInternet } from './network.js';
 export function showLoading() {
   if (document.getElementById('loading-overlay')) return;
   const loadingDiv = document.createElement('div');
@@ -17,6 +18,12 @@ export function escapeHtml(s) {
 }
 
 export function showErrorPage(err, route) {
+  if (!navigator.onLine) {
+    return mostrarSemInternet(document.getElementById('main-content'), async () => {
+      const { loadPage, currentPage } = await import('./index.js');
+      loadPage(route || currentPage || 'dashboard');
+    });
+  }
   const message = escapeHtml(err.message || String(err));
   const html = `
   <div class="error-container">
