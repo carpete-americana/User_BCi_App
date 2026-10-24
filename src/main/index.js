@@ -136,7 +136,7 @@ ipcMain.handle('app:checkServerStatus', async () => {
   }
 });
 
-updater.setupUpdateHandlers();
+updater.setupUpdateHandlers({ ocupado: () => dispositivo.emTrabalho() });
 
 errorHandler.setupErrorHandlers();
 
