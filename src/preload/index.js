@@ -43,6 +43,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on('navigate-to', (e, route) => cb && cb(route));
     },
 
+    // Avisos novos vistos pelo processo principal: atualiza o sino e, com a janela em foco, mostra-os na app.
+    onAvisosMudaram: (cb) => {
+      ipcRenderer.on('avisos:mudaram', (e, novas) => cb && cb(novas));
+    },
+
     // Confirmação de que a cache foi limpa (Ctrl+Shift+C).
     onCacheCleared: (cb) => {
       ipcRenderer.on('cache-cleared', () => cb && cb());

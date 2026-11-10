@@ -396,6 +396,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (window.electronAPI && typeof window.electronAPI.onAvisosMudaram === 'function') {
+    window.electronAPI.onAvisosMudaram((novas) => {
+      refreshNotificationBadge();
+      if (document.getElementById('notificationBellDropdown')?.classList.contains('show')) loadNotificationBellList();
+      for (const n of novas || []) window.showNotification?.(n.tipo, n.titulo, n.corpo);
+    });
+  }
+
   if (window.electronAPI && typeof window.electronAPI.onCacheCleared === 'function') {
     window.electronAPI.onCacheCleared(() => {
       DEBUG && console.log('[CACHE] limpa pelo atalho');
