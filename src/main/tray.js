@@ -1,11 +1,16 @@
 const { app, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { DEBUG } = require('./config');
+const { pintarPonto } = require('./avisosPc');
 
 let tray = null;
 let operacoesLigadas = false;
 let aoMostrar = null;
 let aoSair = null;
+let porLer = 0;
+let avisos = null;
+let iconeBase = null;
+let iconePonto = null;
 
 const TOOLTIP = 'BCi User Application';
 const TOOLTIP_OPERACOES = 'BCI · operações automáticas ligadas';
@@ -17,6 +22,8 @@ function irParaPagina(pagina) {
   if (win) win.webContents.send('navigate-to', pagina);
 }
 
+const textoPorLer = () => (porLer === 1 ? '1 aviso por ler' : `${porLer} avisos por ler`);
+
 function construirMenu() {
   return Menu.buildFromTemplate([
     {
@@ -26,12 +33,19 @@ function construirMenu() {
         if (aoMostrar) aoMostrar();
       }
     },
+    ...(porLer > 0 ? [{ label: textoPorLer(), click: () => aoMostrar && aoMostrar() }] : []),
     { type: 'separator' },
     { label: 'Dashboard', click: () => irParaPagina('dashboard') },
     { label: 'Regras', click: () => irParaPagina('rules') },
     { type: 'separator' },
     // Só informa: ligar e desligar faz-se em Definições, depois de um diálogo de consentimento.
     { label: `Operações automáticas: ${operacoesLigadas ? 'ligadas' : 'desligadas'}`, enabled: false },
+    ...(avisos ? [{
+      label: 'Notificações do Windows',
+      type: 'checkbox',
+      checked: avisos.ligados(),
+      click: (item) => avisos.definirLigados(item.checked)
+    }] : []),
     { type: 'separator' },
     {
       label: 'Sair',
@@ -46,7 +60,17 @@ function construirMenu() {
 function atualizar() {
   if (!tray) return;
   tray.setContextMenu(construirMenu());
-  tray.setToolTip(operacoesLigadas ? TOOLTIP_OPERACOES : TOOLTIP);
+  const base = operacoesLigadas ? TOOLTIP_OPERACOES : TOOLTIP;
+  tray.setToolTip(porLer > 0 ? `${base} · ${textoPorLer()}` : base);
+  if (iconeBase) tray.setImage(porLer > 0 ? iconeComPonto() : iconeBase);
+}
+
+function iconeComPonto() {
+  if (iconePonto) return iconePonto;
+  const lado = 32;
+  const pequeno = iconeBase.resize({ width: lado, height: lado });
+  iconePonto = nativeImage.createFromBitmap(pintarPonto(pequeno.toBitmap(), lado, lado), { width: lado, height: lado });
+  return iconePonto;
 }
 
 function createTray(showWindowCallback, quitCallback) {
@@ -73,6 +97,7 @@ function createTray(showWindowCallback, quitCallback) {
   }
 
   tray = new Tray(icon);
+  iconeBase = icon.isEmpty() ? null : icon;
   atualizar();
 
   tray.on('double-click', () => {
@@ -91,6 +116,18 @@ function setOperacoes(ligado) {
   atualizar();
 }
 
+/** Número de avisos por ler: ponto no ícone, tooltip e linha no menu. */
+function setPorLer(total) {
+  porLer = total;
+  atualizar();
+}
+
+/** Liga a caixa «Notificações do Windows» do menu. */
+function setAvisos(controlo) {
+  avisos = controlo;
+  atualizar();
+}
+
 function destroyTray() {
   if (tray) {
     tray.destroy();
@@ -102,5 +139,7 @@ function destroyTray() {
 module.exports = {
   createTray,
   destroyTray,
-  setOperacoes
+  setOperacoes,
+  setPorLer,
+  setAvisos
 };

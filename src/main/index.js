@@ -1,7 +1,7 @@
 require('dotenv').config();
 const os = require('os');
 const crypto = require('crypto');
-const { app, globalShortcut, ipcMain, BrowserWindow, safeStorage, session, screen } = require('electron');
+const { app, globalShortcut, ipcMain, BrowserWindow, Notification, safeStorage, session, screen } = require('electron');
 const ElectronStorage = require('../../js/storage');
 const { DEBUG, API_CONFIG } = require('./config');
 const cache = require('./cache');
@@ -22,6 +22,12 @@ const { encontrarBrowser, abrirBrowserReal, limparPerfis } = require('./browserR
 const { levantarDaConta } = require('./levantar');
 const { depositarDaConta } = require('./depositar');
 const { pedirConsentimento } = require('./consentimentoJanela');
+const { criarAvisosPc } = require('./avisosPc');
+const { userIdDoToken } = require('./dispositivo');
+const path = require('path');
+
+// Sem isto, igual ao appId do instalador, o Windows não mostra as notificações da app instalada.
+if (process.platform === 'win32') app.setAppUserModelId('pt.bcibizz.UserApp');
 
 // Operações automáticas neste computador: o consentimento é pedido aqui, numa janela local da app, nunca pela página.
 const apiDados = criarApi({ baseUrl: API_CONFIG.API_URL, lerToken: () => ElectronStorage.getItem('token'), guardarToken: (token) => ElectronStorage.setItem('token', token) });
@@ -144,6 +150,44 @@ errorHandler.setupErrorHandlers();
 let mainWindow = null;
 let appTray = null;
 
+function mostrarJanela() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    mainWindow = window.createWindow();
+  }
+}
+
+// Sem referência, o coletor de lixo leva a notificação e o clique perde-se.
+const notificacoesAbertas = new Set();
+
+function mostrarNotificacao({ titulo, corpo }, aoClicar) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: titulo, body: corpo, icon: path.join(__dirname, '../../assets/icons/icon.png') });
+  notificacoesAbertas.add(n);
+  n.on('click', () => { notificacoesAbertas.delete(n); aoClicar(); });
+  n.on('close', () => notificacoesAbertas.delete(n));
+  n.show();
+}
+
+const avisosPc = criarAvisosPc({
+  api: apiDados,
+  lerUserId: () => userIdDoToken(ElectronStorage.getItem('token')),
+  storage: ElectronStorage,
+  mostrar: mostrarNotificacao,
+  janelaEmFoco: () => !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()),
+  abrir: (pagina) => {
+    mostrarJanela();
+    mainWindow.webContents.send('navigate-to', pagina);
+  },
+  aoContar: (total) => tray.setPorLer(total),
+  aoMudar: (novas) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('avisos:mudaram', novas);
+  }
+});
+
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -177,20 +221,12 @@ app.whenReady().then(() => {
     cache.handleClearAll();
   });
   
-  appTray = tray.createTray(
-    () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-      } else {
-        mainWindow = window.createWindow();
-      }
-    },
-    () => {
-      app.quit();
-    }
-  );
-  
+  appTray = tray.createTray(mostrarJanela, () => {
+    app.quit();
+  });
+  tray.setAvisos(avisosPc);
+  avisosPc.iniciar();
+
   mainWindow.webContents.on('did-fail-load', () => {
     cache.setOnlineStatus(false);
   });
@@ -239,7 +275,9 @@ app.on('before-quit', (evento) => {
   cache.stopAllIntervals();
 
   dispositivo.parar();
-  
+
+  avisosPc.parar();
+
   shortcuts.unregisterShortcuts();
   
   tray.destroyTray();
