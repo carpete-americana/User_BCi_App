@@ -4,6 +4,7 @@ const ElectronStorage = require('../../js/storage');
 const { DEBUG } = require('./config');
 const { arrancarOculto } = require('./dispositivo');
 const { opcoesBarra, seguirMaximizada } = require('./barraJanela');
+const { abreNoSistema } = require('./linksExternos');
 
 function loadWindowState() {
   const state = ElectronStorage.getItem('window-state');
@@ -71,7 +72,7 @@ function createWindow() {
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Nenhuma janela nova com preload: links externos abrem no browser do sistema.
-    if (/^https:\/\/(www\.)?bcibizz\.pt\//.test(url)) {
+    if (abreNoSistema(url)) {
       shell.openExternal(url).catch(() => {});
     } else {
       DEBUG && console.warn('[SECURITY] window.open bloqueado:', url);
